@@ -74,6 +74,7 @@ Current implementation status:
 - `models/` defines the normalized market, company, price, fundamentals, macro, and agent contracts.
 - `llm/` defines static endpoint config and request-level inference settings.
 - `connectors/` now defines the normalized connector interface and provider ticker codecs.
+- `connectors/` also includes an in-memory connector for tests, fixtures, and local development.
 
 ## Core Data Contracts
 
@@ -177,7 +178,7 @@ macro_agent ------------------------------------------|--> pm_agent
 
 ## Next Steps
 
-1. Implement the first concrete connector on top of the normalized connector interface.
+1. Implement the first external-data connector on top of the normalized connector interface.
 2. Implement the indicator specification registry and calculation engine.
 3. Implement prompt builders for the technical and quantitative agents first.
 4. Implement agent runtime with schema validation, retries, and trace storage.

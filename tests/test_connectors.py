@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
 from alphaforge.connectors import (
+    InMemoryConnector,
     MarketDataConnector,
     from_provider_ticker,
     to_provider_ticker,
@@ -114,10 +115,16 @@ def test_cn_prefixed_codec_rejects_non_cn_market() -> None:
         to_provider_ticker(security_id, DataProvider.AKSHARE)
 
 
-def test_market_data_connector_protocol_can_back_normalized_models() -> None:
-    class DummyConnector:
-        def get_company_profile(self, security_id: SecurityId) -> CompanyProfile:
-            return CompanyProfile(
+@pytest.fixture
+def security_id() -> SecurityId:
+    return SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+
+
+@pytest.fixture
+def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
+    return InMemoryConnector(
+        company_profiles={
+            security_id: CompanyProfile(
                 security_id=security_id,
                 company_name="Apple Inc.",
                 sector="Technology",
@@ -125,33 +132,77 @@ def test_market_data_connector_protocol_can_back_normalized_models() -> None:
                 country="US",
                 currency="USD",
             )
-
-        def get_price_bars(
-            self,
-            security_id: SecurityId,
-            *,
-            start_date: date,
-            end_date: date,
-            interval: str = "1d",
-        ) -> tuple[PriceBar, ...]:
-            return ()
-
-        def get_market_context(self, market: Market) -> MarketContext:
-            return MarketContext(
-                market=market,
+        },
+        market_contexts={
+            Market.US: MarketContext(
+                market=Market.US,
                 region="North America",
                 timezone="America/New_York",
                 trading_currency="USD",
                 benchmark_symbol="SPY",
                 trading_calendar="XNYS",
             )
-
-    connector: MarketDataConnector = DummyConnector()
-
-    profile = connector.get_company_profile(
-        SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+        },
+        price_bars={
+            security_id: (
+                PriceBar(
+                    security_id=security_id,
+                    timestamp=datetime(2026, 3, 14, 16, 0),
+                    open=210.0,
+                    high=212.0,
+                    low=209.5,
+                    close=211.4,
+                    volume=10_000_000,
+                ),
+                PriceBar(
+                    security_id=security_id,
+                    timestamp=datetime(2026, 3, 15, 16, 0),
+                    open=211.5,
+                    high=214.0,
+                    low=210.8,
+                    close=213.6,
+                    volume=12_000_000,
+                ),
+            )
+        },
     )
+
+
+def test_market_data_connector_protocol_can_back_normalized_models(
+    in_memory_connector: InMemoryConnector,
+    security_id: SecurityId,
+) -> None:
+    connector: MarketDataConnector = in_memory_connector
+
+    profile = connector.get_company_profile(security_id)
     market_context = connector.get_market_context(Market.US)
 
     assert profile.company_name == "Apple Inc."
     assert market_context.benchmark_symbol == "SPY"
+
+
+def test_in_memory_connector_filters_price_bars_by_date(
+    in_memory_connector: InMemoryConnector,
+    security_id: SecurityId,
+) -> None:
+    bars = in_memory_connector.get_price_bars(
+        security_id,
+        start_date=date(2026, 3, 15),
+        end_date=date(2026, 3, 15),
+    )
+
+    assert len(bars) == 1
+    assert bars[0].close == 213.6
+
+
+def test_in_memory_connector_rejects_unsupported_interval(
+    in_memory_connector: InMemoryConnector,
+    security_id: SecurityId,
+) -> None:
+    with pytest.raises(ValueError, match="supports only the 1d interval"):
+        in_memory_connector.get_price_bars(
+            security_id,
+            start_date=date(2026, 3, 14),
+            end_date=date(2026, 3, 15),
+            interval="1h",
+        )
