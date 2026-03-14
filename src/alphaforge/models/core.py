@@ -25,8 +25,6 @@ class DataProvider(StrEnum):
 
     AKSHARE = "akshare"
     YAHOO_FINANCE = "yahoo_finance"
-    EASTMONEY = "eastmoney"
-    FRED = "fred"
     MANUAL = "manual"
 
 

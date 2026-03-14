@@ -69,6 +69,12 @@ src/alphaforge/
   frontend/
 ```
 
+Current implementation status:
+
+- `models/` defines the normalized market, company, price, fundamentals, macro, and agent contracts.
+- `llm/` defines static endpoint config and request-level inference settings.
+- `connectors/` now defines the normalized connector interface and provider ticker codecs.
+
 ## Core Data Contracts
 
 The data layer normalizes all sources into these stable objects:
@@ -98,6 +104,13 @@ Provider symbol policy:
 - Each connector is responsible for converting between `SecurityId` and its own ticker format.
 - Provider-specific symbol syntax must not leak into indicators, prompts, agent traces, or frontend state.
 - If ticker conversion later requires shared state, introduce a dedicated resolver service in the connector layer instead of pushing provider types into core models.
+
+Initial codec scope:
+
+- Yahoo Finance uses `AAPL`, `7203.T`, `0700.HK`, `600519.SS`, and `000001.SZ`.
+- AkShare currently uses lowercase CN-prefixed tickers such as `sh600519` and `sz000001`.
+- `MANUAL` accepts the canonical `MARKET:SYMBOL` form for fixtures and local test data.
+- Exchange inference is only automatic where the provider ticker format makes it unambiguous.
 
 ## Agent Protocol
 
@@ -164,7 +177,7 @@ macro_agent ------------------------------------------|--> pm_agent
 
 ## Next Steps
 
-1. Implement connectors and normalized repository interfaces, starting with market-aware symbol codecs in each provider.
+1. Implement the first concrete connector on top of the normalized connector interface.
 2. Implement the indicator specification registry and calculation engine.
 3. Implement prompt builders for the technical and quantitative agents first.
 4. Implement agent runtime with schema validation, retries, and trace storage.
