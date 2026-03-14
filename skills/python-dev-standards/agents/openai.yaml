@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Dev Standards"
+  short_description: "Python工程设计、重构、测试与维护规范"
+  default_prompt: "Use $python-dev-standards to implement or refactor this Python project under the required engineering standards."
