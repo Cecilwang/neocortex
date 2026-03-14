@@ -1,6 +1,6 @@
 ---
 name: akshare-api
-description: AkShare data access workflow and API lookup guidance. Use this skill when Codex needs to fetch financial, macro, stock, fund, futures, bond, or alternative data with AkShare, choose the right AkShare function from the official documentation, understand the returned schema, or implement and debug AkShare-based data collection in Python.
+description: AkShare data access workflow and API lookup guidance. Use this skill when the user asks to fetch financial, macro, stock, fund, futures, bond, or alternative data with AkShare, choose the right AkShare function from the official documentation, understand the returned schema, or implement and debug AkShare-based data collection in Python.
 ---
 
 # AkShare API
