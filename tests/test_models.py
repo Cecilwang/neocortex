@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+import pytest
+
 from alphaforge.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
 from alphaforge.models.agent import (
     AgentExecutionTrace,
@@ -20,8 +22,12 @@ from alphaforge.models.core import (
 )
 
 
-def test_core_models_store_normalized_entities() -> None:
-    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+@pytest.fixture
+def security_id() -> SecurityId:
+    return SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+
+
+def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
     profile = CompanyProfile(
         security_id=security_id,
         company_name="Apple Inc.",
@@ -61,8 +67,9 @@ def test_core_models_store_normalized_entities() -> None:
     assert benchmark.metric_averages["roe"] == 0.18
 
 
-def test_fundamental_snapshot_tracks_source_provider_without_symbol_mapping() -> None:
-    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+def test_fundamental_snapshot_tracks_source_provider_without_symbol_mapping(
+    security_id: SecurityId,
+) -> None:
     snapshot = FundamentalSnapshot(
         security_id=security_id,
         as_of_date=date(2026, 3, 15),
@@ -76,8 +83,9 @@ def test_fundamental_snapshot_tracks_source_provider_without_symbol_mapping() ->
     assert snapshot.security_id.ticker == "US:AAPL"
 
 
-def test_agent_trace_captures_request_and_response_contract() -> None:
-    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+def test_agent_trace_captures_request_and_response_contract(
+    security_id: SecurityId,
+) -> None:
     request = AgentRequest(
         request_id="req-20260315-001",
         agent=AgentRole.TECHNICAL,
@@ -126,3 +134,22 @@ def test_agent_trace_captures_request_and_response_contract() -> None:
     assert trace.response.security_id.exchange == "NASDAQ"
     assert trace.response.reasoning == "Momentum remains constructive."
     assert trace.response_validation_status is ResponseValidationStatus.PASSED
+
+
+@pytest.mark.parametrize(
+    ("market", "symbol", "expected_ticker"),
+    [
+        (Market.US, "AAPL", "US:AAPL"),
+        (Market.JP, "7203", "JP:7203"),
+        (Market.HK, "0700", "HK:0700"),
+    ],
+)
+def test_security_id_builds_market_scoped_ticker(
+    market: Market,
+    symbol: str,
+    expected_ticker: str,
+) -> None:
+    assert (
+        SecurityId(symbol=symbol, market=market, exchange="TEST").ticker
+        == expected_ticker
+    )
