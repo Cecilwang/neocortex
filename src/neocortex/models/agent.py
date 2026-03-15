@@ -7,8 +7,8 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-from alphaforge.llm import LLMInferenceConfig
-from alphaforge.models.core import SecurityId
+from neocortex.llm import LLMInferenceConfig
+from neocortex.models.core import SecurityId
 
 
 JsonDict = dict[str, Any]

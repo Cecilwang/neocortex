@@ -2,15 +2,15 @@ from datetime import date, datetime
 
 import pytest
 
-from alphaforge.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
-from alphaforge.models.agent import (
+from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
+from neocortex.models.agent import (
     AgentExecutionTrace,
     AgentRequest,
     AgentResponse,
     AgentRole,
     ResponseValidationStatus,
 )
-from alphaforge.models.core import (
+from neocortex.models.core import (
     CompanyProfile,
     DataProvider,
     FundamentalSnapshot,

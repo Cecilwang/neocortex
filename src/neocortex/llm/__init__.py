@@ -1,6 +1,6 @@
 """LLM service configuration components."""
 
-from alphaforge.llm.config import (
+from neocortex.llm.config import (
     LLMEndpoint,
     LLMInferenceConfig,
     LLMRequestConfig,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
-from alphaforge.models.core import (
+from neocortex.models.core import (
     CompanyProfile,
     Market,
     MarketContext,

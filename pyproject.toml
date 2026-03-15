@@ -1,7 +1,7 @@
 [project]
-name = "alphaforge"
+name = "neocortex"
 version = "0.1.0"
-description = "AlphaForge multi-market prompt-driven equity research platform"
+description = "Neocortex multi-market prompt-driven equity research platform"
 readme = "DESIGN.md"
 requires-python = ">=3.11"
 dependencies = []

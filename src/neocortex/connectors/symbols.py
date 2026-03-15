@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from alphaforge.models.core import DataProvider, Market, SecurityId
+from neocortex.models.core import DataProvider, Market, SecurityId
 
 
 _MARKET_EXCHANGES: dict[Market, str] = {

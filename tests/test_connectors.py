@@ -2,13 +2,13 @@ from datetime import date, datetime
 
 import pytest
 
-from alphaforge.connectors import (
+from neocortex.connectors import (
     InMemoryConnector,
     MarketDataConnector,
     from_provider_ticker,
     to_provider_ticker,
 )
-from alphaforge.models import (
+from neocortex.models import (
     CompanyProfile,
     DataProvider,
     Market,

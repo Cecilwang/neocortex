@@ -1,8 +1,8 @@
-# AlphaForge Design
+# Neocortex Design
 
 ## Goal
 
-Build AlphaForge as a prompt-driven multi-market equity research platform with four major capabilities:
+Build Neocortex as a prompt-driven multi-market equity research platform with four major capabilities:
 
 1. A multi-agent equity analyzer driven by structured prompts.
 2. A provider or connector layer that supplies the data required by prompts.
@@ -49,7 +49,7 @@ The system is split into four layers:
 ## Initial Module Layout
 
 ```text
-src/alphaforge/
+src/neocortex/
   models/
     core.py
     agent.py
@@ -58,7 +58,7 @@ src/alphaforge/
 Planned later modules:
 
 ```text
-src/alphaforge/
+src/neocortex/
   llm/
   connectors/
   indicators/
