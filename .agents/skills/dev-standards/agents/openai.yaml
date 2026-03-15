@@ -1,4 +1,0 @@
-interface:
-  display_name: "Dev Standards"
-  short_description: "通用工程设计、重构与维护规范"
-  default_prompt: "Use $dev-standards to design, implement, or refactor this project under the required engineering standards."

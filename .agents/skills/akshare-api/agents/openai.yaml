@@ -1,4 +1,0 @@
-interface:
-  display_name: "AkShare API"
-  short_description: "AkShare财经数据接口使用与官方文档查阅指南"
-  default_prompt: "Use $akshare-api to find the right AkShare API and implement data fetching for this task."
