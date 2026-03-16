@@ -138,6 +138,7 @@ def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
     assert profile.industry == "酿酒行业"
     assert profile.sector == "酿酒行业"
     assert profile.currency == "CNY"
+    assert bars.security_id == security_id
     assert len(bars) == 2
     assert bars[0].timestamp == datetime(2026, 3, 14, 15, 0)
     assert bars[1].close == 1528.0
@@ -200,7 +201,7 @@ def test_akshare_connector_returns_empty_tuple_when_provider_has_no_bars() -> No
         end_date=date(2026, 3, 15),
     )
 
-    assert bars == ()
+    assert bars.bars == ()
 
 
 @pytest.mark.parametrize("missing_field", ["股票简称", "行业"])

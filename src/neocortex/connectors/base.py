@@ -7,7 +7,7 @@ from typing import Protocol
 
 from neocortex.models.core import (
     CompanyProfile,
-    PriceBar,
+    PriceSeries,
     SecurityId,
 )
 
@@ -28,5 +28,5 @@ class MarketDataConnector(Protocol):
         end_date: date,
         interval: str = DAILY_BAR_INTERVAL,
         adjust: str | None = None,
-    ) -> tuple[PriceBar, ...]:
-        """Return normalized OHLCV bars for one security."""
+    ) -> PriceSeries:
+        """Return a normalized price series for one security."""

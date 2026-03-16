@@ -14,6 +14,7 @@ from neocortex.models.core import (
     Exchange,
     Market,
     PriceBar,
+    PriceSeries,
     SecurityId,
 )
 
@@ -71,7 +72,7 @@ class AkShareConnector:
         end_date: date,
         interval: str = DAILY_BAR_INTERVAL,
         adjust: str | None = None,
-    ) -> tuple[PriceBar, ...]:
+    ) -> PriceSeries:
         """Return normalized daily bars for one China A-share."""
 
         if interval != DAILY_BAR_INTERVAL:
@@ -134,9 +135,9 @@ class AkShareConnector:
         frame: pd.DataFrame,
         *,
         adjust: str,
-    ) -> tuple[PriceBar, ...]:
+    ) -> PriceSeries:
         if frame.empty:
-            return ()
+            return PriceSeries(security_id=security_id, bars=())
 
         bars: list[PriceBar] = []
         for _, row in frame.iterrows():
@@ -159,4 +160,4 @@ class AkShareConnector:
                     adjusted_close=close if adjust else None,
                 )
             )
-        return tuple(bars)
+        return PriceSeries(security_id=security_id, bars=tuple(bars))
