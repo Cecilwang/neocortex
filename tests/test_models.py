@@ -13,18 +13,20 @@ from neocortex.models.agent import (
 from neocortex.models.core import (
     CompanyProfile,
     DataProvider,
+    Exchange,
     FundamentalSnapshot,
     Market,
     MarketContext,
     PriceBar,
     SecurityId,
     SectorBenchmark,
+    TradingCalendar,
 )
 
 
 @pytest.fixture
 def security_id() -> SecurityId:
-    return SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+    return SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
 
 
 def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
@@ -42,7 +44,7 @@ def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
         timezone="America/New_York",
         trading_currency="USD",
         benchmark_symbol="SPY",
-        trading_calendar="XNYS",
+        trading_calendar=TradingCalendar.XNYS,
     )
     bar = PriceBar(
         security_id=security_id,
@@ -62,7 +64,7 @@ def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
     )
 
     assert profile.security_id.ticker == "US:AAPL"
-    assert market_context.trading_calendar == "XNYS"
+    assert market_context.trading_calendar is TradingCalendar.XNYS
     assert bar.close == 211.4
     assert benchmark.metric_averages["roe"] == 0.18
 
@@ -131,7 +133,7 @@ def test_agent_trace_captures_request_and_response_contract(
     assert trace.response.request_id == "req-20260315-001"
     assert trace.inference_config.endpoint.model == "gpt-test"
     assert trace.inference_config.request.temperature == 0.2
-    assert trace.response.security_id.exchange == "NASDAQ"
+    assert trace.response.security_id.exchange is Exchange.XNAS
     assert trace.response.reasoning == "Momentum remains constructive."
     assert trace.response_validation_status is ResponseValidationStatus.PASSED
 
@@ -150,6 +152,6 @@ def test_security_id_builds_market_scoped_ticker(
     expected_ticker: str,
 ) -> None:
     assert (
-        SecurityId(symbol=symbol, market=market, exchange="TEST").ticker
+        SecurityId(symbol=symbol, market=market, exchange=Exchange.XNYS).ticker
         == expected_ticker
     )

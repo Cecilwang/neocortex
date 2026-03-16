@@ -1,123 +1,26 @@
 from datetime import date, datetime
 
+import pandas as pd
 import pytest
 
 from neocortex.connectors import (
+    AkShareConnector,
     InMemoryConnector,
     MarketDataConnector,
-    from_provider_ticker,
-    to_provider_ticker,
 )
+from neocortex.markets import get_market_context
 from neocortex.models import (
     CompanyProfile,
-    DataProvider,
+    Exchange,
     Market,
-    MarketContext,
     PriceBar,
     SecurityId,
 )
 
 
-@pytest.mark.parametrize(
-    ("security_id", "provider", "expected_ticker"),
-    [
-        (
-            SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ"),
-            DataProvider.YAHOO_FINANCE,
-            "AAPL",
-        ),
-        (
-            SecurityId(symbol="7203", market=Market.JP, exchange="TSE"),
-            DataProvider.YAHOO_FINANCE,
-            "7203.T",
-        ),
-        (
-            SecurityId(symbol="0700", market=Market.HK, exchange="HKEX"),
-            DataProvider.YAHOO_FINANCE,
-            "0700.HK",
-        ),
-        (
-            SecurityId(symbol="600519", market=Market.CN, exchange="SSE"),
-            DataProvider.YAHOO_FINANCE,
-            "600519.SS",
-        ),
-        (
-            SecurityId(symbol="000001", market=Market.CN, exchange="SZSE"),
-            DataProvider.AKSHARE,
-            "sz000001",
-        ),
-    ],
-)
-def test_to_provider_ticker_formats_market_specific_symbol(
-    security_id: SecurityId,
-    provider: DataProvider,
-    expected_ticker: str,
-) -> None:
-    assert to_provider_ticker(security_id, provider) == expected_ticker
-
-
-@pytest.mark.parametrize(
-    ("ticker", "provider", "kwargs", "expected_security_id"),
-    [
-        (
-            "AAPL",
-            DataProvider.YAHOO_FINANCE,
-            {"market": Market.US, "exchange": "NASDAQ"},
-            SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ"),
-        ),
-        (
-            "7203.T",
-            DataProvider.YAHOO_FINANCE,
-            {},
-            SecurityId(symbol="7203", market=Market.JP, exchange="TSE"),
-        ),
-        (
-            "0700.HK",
-            DataProvider.YAHOO_FINANCE,
-            {},
-            SecurityId(symbol="0700", market=Market.HK, exchange="HKEX"),
-        ),
-        (
-            "600519.SS",
-            DataProvider.YAHOO_FINANCE,
-            {},
-            SecurityId(symbol="600519", market=Market.CN, exchange="SSE"),
-        ),
-        (
-            "sz000001",
-            DataProvider.AKSHARE,
-            {},
-            SecurityId(symbol="000001", market=Market.CN, exchange="SZSE"),
-        ),
-        (
-            "US:AAPL",
-            DataProvider.MANUAL,
-            {"exchange": "NASDAQ"},
-            SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ"),
-        ),
-    ],
-)
-def test_from_provider_ticker_restores_canonical_security_id(
-    ticker: str,
-    provider: DataProvider,
-    kwargs: dict[str, str | Market],
-    expected_security_id: SecurityId,
-) -> None:
-    assert from_provider_ticker(ticker, provider, **kwargs) == expected_security_id
-
-
-def test_cn_prefixed_codec_rejects_non_cn_market() -> None:
-    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
-
-    with pytest.raises(
-        ValueError, match="not supported by the CN-prefixed ticker codec"
-    ):
-        to_provider_ticker(security_id, DataProvider.AKSHARE)
-
-
 @pytest.fixture
 def security_id() -> SecurityId:
-    return SecurityId(symbol="AAPL", market=Market.US, exchange="NASDAQ")
+    return SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
 
 
 @pytest.fixture
@@ -131,16 +34,6 @@ def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
                 industry="Consumer Electronics",
                 country="US",
                 currency="USD",
-            )
-        },
-        market_contexts={
-            Market.US: MarketContext(
-                market=Market.US,
-                region="North America",
-                timezone="America/New_York",
-                trading_currency="USD",
-                benchmark_symbol="SPY",
-                trading_calendar="XNYS",
             )
         },
         price_bars={
@@ -175,10 +68,8 @@ def test_market_data_connector_protocol_can_back_normalized_models(
     connector: MarketDataConnector = in_memory_connector
 
     profile = connector.get_company_profile(security_id)
-    market_context = connector.get_market_context(Market.US)
 
     assert profile.company_name == "Apple Inc."
-    assert market_context.benchmark_symbol == "SPY"
 
 
 def test_in_memory_connector_filters_price_bars_by_date(
@@ -206,3 +97,110 @@ def test_in_memory_connector_rejects_unsupported_interval(
             end_date=date(2026, 3, 15),
             interval="1h",
         )
+
+
+def test_in_memory_connector_rejects_adjusted_price_request(
+    in_memory_connector: InMemoryConnector,
+    security_id: SecurityId,
+) -> None:
+    with pytest.raises(ValueError, match="does not support adjusted price series"):
+        in_memory_connector.get_price_bars(
+            security_id,
+            start_date=date(2026, 3, 14),
+            end_date=date(2026, 3, 15),
+            adjust="qfq",
+        )
+
+
+class FakeAkShareAPI:
+    def stock_individual_info_em(
+        self, symbol: str, timeout: float | None
+    ) -> pd.DataFrame:
+        assert symbol == "600519"
+        assert timeout == 3.0
+        return pd.DataFrame(
+            {
+                "item": ["股票代码", "股票简称", "行业", "上市时间"],
+                "value": ["600519", "贵州茅台", "酿酒行业", "20010827"],
+            }
+        )
+
+    def stock_zh_a_hist(
+        self,
+        symbol: str,
+        period: str,
+        start_date: str,
+        end_date: str,
+        adjust: str,
+        timeout: float | None,
+    ) -> pd.DataFrame:
+        assert symbol == "600519"
+        assert period == "daily"
+        assert start_date == "20260314"
+        assert end_date == "20260315"
+        assert adjust == "qfq"
+        assert timeout == 3.0
+        return pd.DataFrame(
+            {
+                "日期": [date(2026, 3, 14), date(2026, 3, 15)],
+                "开盘": [1500.0, 1510.0],
+                "收盘": [1515.0, 1528.0],
+                "最高": [1520.0, 1533.0],
+                "最低": [1498.0, 1505.0],
+                "成交量": [120000.0, 110000.0],
+            }
+        )
+
+
+def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
+
+    profile = connector.get_company_profile(security_id)
+    bars = connector.get_price_bars(
+        security_id,
+        start_date=date(2026, 3, 14),
+        end_date=date(2026, 3, 15),
+        adjust="qfq",
+    )
+    market_context = get_market_context(Market.CN)
+
+    assert profile.company_name == "贵州茅台"
+    assert profile.industry == "酿酒行业"
+    assert profile.sector == "酿酒行业"
+    assert profile.currency == "CNY"
+    assert len(bars) == 2
+    assert bars[0].timestamp == datetime(2026, 3, 14, 15, 0)
+    assert bars[1].close == 1528.0
+    assert bars[1].adjusted_close == 1528.0
+    assert market_context.timezone == "Asia/Shanghai"
+    assert market_context.benchmark_symbol == "000300.SH"
+
+
+def test_akshare_connector_rejects_non_cn_security() -> None:
+    connector = AkShareConnector(api=FakeAkShareAPI())
+    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
+
+    with pytest.raises(ValueError, match="supports only CN securities"):
+        connector.get_company_profile(security_id)
+
+
+def test_akshare_connector_rejects_non_daily_interval() -> None:
+    connector = AkShareConnector(api=FakeAkShareAPI())
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    with pytest.raises(ValueError, match="supports only the 1d interval"):
+        connector.get_price_bars(
+            security_id,
+            start_date=date(2026, 3, 14),
+            end_date=date(2026, 3, 15),
+            interval="1h",
+        )
+
+
+def test_akshare_connector_rejects_unsupported_cn_exchange() -> None:
+    connector = AkShareConnector(api=FakeAkShareAPI())
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XBJS)
+
+    with pytest.raises(ValueError, match="requires an XSHG or XSHE listing exchange"):
+        connector.get_company_profile(security_id)

@@ -18,14 +18,15 @@ The product must support multiple stock markets from the start:
 
 ## Step 1 Scope
 
-This step defines the stable architecture boundary before any provider or agent implementation work:
+This step defines the stable architecture boundary before broad provider or agent implementation work:
 
 - Project layout
 - Shared domain models
 - Agent input and output protocol
 - Design details maintained in this document
 
-No external data access or LLM execution is implemented yet.
+AkShare now provides the first minimal external-data connector for China A-shares.
+No LLM execution is implemented yet.
 
 ## Architecture
 
@@ -34,7 +35,8 @@ The system is split into four layers:
 1. Data layer
    - Connectors fetch market, fundamentals, news, macro, and sector benchmark data.
    - Connectors normalize upstream schemas into stable internal models.
-   - Market-aware adapters handle symbol format, exchange mapping, timezone, trading calendar, and benchmark selection.
+   - A local market metadata registry provides timezone, trading calendar, and benchmark defaults by market.
+   - Market-aware adapters handle symbol format and exchange mapping around upstream APIs.
 2. Feature layer
    - Indicator engine computes technical and financial features.
    - Prompt builders convert normalized data and indicators into agent-ready payloads.
@@ -72,9 +74,11 @@ src/neocortex/
 Current implementation status:
 
 - `models/` defines the normalized market, company, price, fundamentals, macro, and agent contracts.
+- `markets.py` defines local market metadata such as timezone, benchmark, and trading calendar.
 - `llm/` defines static endpoint config and request-level inference settings.
-- `connectors/` now defines the normalized connector interface and provider ticker codecs.
+- `connectors/` now defines the normalized connector interface for external data adapters.
 - `connectors/` also includes an in-memory connector for tests, fixtures, and local development.
+- `connectors/` now includes a minimal AkShare connector for CN company profile and daily bars.
 
 ## Core Data Contracts
 
@@ -91,10 +95,14 @@ The data layer normalizes all sources into these stable objects:
 
 These models are intentionally provider-agnostic so AkShare, Yahoo Finance, EDINET-style sources, or later replacements do not leak into downstream code.
 
+`exchange` and `trading_calendar` use canonical ISO 10383 MIC-style identifiers such as `XNAS`, `XNYS`, `XTKS`, `XHKG`, `XSHG`, and `XSHE`. Internal models should not mix ad hoc aliases like `NASDAQ`, `SSE`, or `SZSE`.
+
+`trading_calendar` means the exchange or market session calendar used to decide whether a date is a trading day, which holidays are closed, and how rolling windows advance across sessions. It is distinct from `timezone`: timezone locates a timestamp, while trading calendar defines which dates count as market sessions.
+
 Multi-market implication:
 
 - Connectors must normalize different symbol conventions such as `AAPL`, `7203.T`, `0700.HK`, and `600519.SH`.
-- Different providers may disagree on the same security identifier, so each connector must implement its own `SecurityId <-> provider ticker` conversion logic.
+- Different providers may disagree on identifier syntax, so each connector must implement its own `SecurityId -> endpoint request parameter` adaptation logic.
 - Agent prompts must receive explicit market context so the model can interpret trading sessions, accounting cadence, language, and benchmark references correctly.
 - Sector benchmarks are market-scoped; a Japan auto stock must not be compared against a US auto sector average by default.
 - Macro inputs are market-scoped first, with optional cross-market overlays later.
@@ -102,16 +110,14 @@ Multi-market implication:
 Provider symbol policy:
 
 - `SecurityId` is the only canonical identity used inside the system.
-- Each connector is responsible for converting between `SecurityId` and its own ticker format.
+- Each connector is responsible for translating `SecurityId` into the concrete request parameters required by the endpoint it calls.
 - Provider-specific symbol syntax must not leak into indicators, prompts, agent traces, or frontend state.
-- If ticker conversion later requires shared state, introduce a dedicated resolver service in the connector layer instead of pushing provider types into core models.
+- Do not force a repository-wide provider ticker abstraction unless multiple concrete call sites share the exact same mapping semantics.
 
-Initial codec scope:
+Current connector symbol scope:
 
-- Yahoo Finance uses `AAPL`, `7203.T`, `0700.HK`, `600519.SS`, and `000001.SZ`.
-- AkShare currently uses lowercase CN-prefixed tickers such as `sh600519` and `sz000001`.
-- `MANUAL` accepts the canonical `MARKET:SYMBOL` form for fixtures and local test data.
-- Exchange inference is only automatic where the provider ticker format makes it unambiguous.
+- The current AkShare connector validates canonical CN listing exchanges `XSHG` and `XSHE` from `SecurityId` and passes the six-digit stock code expected by the Eastmoney-backed AkShare endpoints it uses.
+- Future connectors such as Yahoo Finance should own their own symbol adaptation logic unless a real shared abstraction emerges from multiple concrete implementations.
 
 ## Agent Protocol
 
@@ -178,7 +184,7 @@ macro_agent ------------------------------------------|--> pm_agent
 
 ## Next Steps
 
-1. Implement the first external-data connector on top of the normalized connector interface.
+1. Expand connector coverage beyond the minimal AkShare CN loop to fundamentals, benchmarks, and other markets.
 2. Implement the indicator specification registry and calculation engine.
 3. Implement prompt builders for the technical and quantitative agents first.
 4. Implement agent runtime with schema validation, retries, and trace storage.
