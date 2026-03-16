@@ -7,11 +7,11 @@ from typing import Protocol
 
 from neocortex.models.core import (
     CompanyProfile,
-    Market,
-    MarketContext,
     PriceBar,
     SecurityId,
 )
+
+DAILY_BAR_INTERVAL = "1d"
 
 
 class MarketDataConnector(Protocol):
@@ -26,9 +26,7 @@ class MarketDataConnector(Protocol):
         *,
         start_date: date,
         end_date: date,
-        interval: str = "1d",
+        interval: str = DAILY_BAR_INTERVAL,
+        adjust: str | None = None,
     ) -> tuple[PriceBar, ...]:
         """Return normalized OHLCV bars for one security."""
-
-    def get_market_context(self, market: Market) -> MarketContext:
-        """Return market-level context used by downstream components."""

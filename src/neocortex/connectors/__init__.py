@@ -1,12 +1,11 @@
-"""Connector interfaces and ticker conversion helpers."""
+"""Connector interfaces and concrete provider adapters."""
 
+from neocortex.connectors.akshare import AkShareConnector
 from neocortex.connectors.base import MarketDataConnector
 from neocortex.connectors.memory import InMemoryConnector
-from neocortex.connectors.symbols import from_provider_ticker, to_provider_ticker
 
 __all__ = [
+    "AkShareConnector",
     "InMemoryConnector",
     "MarketDataConnector",
-    "from_provider_ticker",
-    "to_provider_ticker",
 ]

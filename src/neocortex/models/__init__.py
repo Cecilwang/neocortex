@@ -11,6 +11,7 @@ from neocortex.models.agent import (
 from neocortex.models.core import (
     CompanyProfile,
     DataProvider,
+    Exchange,
     FundamentalSnapshot,
     MacroSeriesPoint,
     Market,
@@ -19,6 +20,7 @@ from neocortex.models.core import (
     PriceBar,
     SecurityId,
     SectorBenchmark,
+    TradingCalendar,
 )
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
     "LLMService",
     "CompanyProfile",
     "DataProvider",
+    "Exchange",
     "FundamentalSnapshot",
     "MacroSeriesPoint",
     "Market",
@@ -40,5 +43,6 @@ __all__ = [
     "PriceBar",
     "SecurityId",
     "SectorBenchmark",
+    "TradingCalendar",
     "ResponseValidationStatus",
 ]

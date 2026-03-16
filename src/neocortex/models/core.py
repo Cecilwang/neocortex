@@ -20,6 +20,30 @@ class Market(StrEnum):
     CN = "CN"
 
 
+class Exchange(StrEnum):
+    """Canonical listing exchange identifiers using ISO 10383 MIC values."""
+
+    XNAS = "XNAS"  # 纳斯达克证券交易所
+    XNYS = "XNYS"  # 纽约证券交易所
+    XTKS = "XTKS"  # 东京证券交易所
+    XHKG = "XHKG"  # 香港交易所
+    XSHG = "XSHG"  # 上海证券交易所
+    XSHE = "XSHE"  # 深圳证券交易所
+    XBJS = "XBJS"  # 北京证券交易所
+
+
+class TradingCalendar(StrEnum):
+    """Canonical trading calendar identifiers using MIC-style values."""
+
+    XNAS = "XNAS"  # 纳斯达克交易日历
+    XNYS = "XNYS"  # 纽交所交易日历
+    XTKS = "XTKS"  # 东京交易所交易日历
+    XHKG = "XHKG"  # 香港交易所交易日历
+    XSHG = "XSHG"  # 上交所交易日历
+    XSHE = "XSHE"  # 深交所交易日历
+    XBJS = "XBJS"  # 北交所交易日历
+
+
 class DataProvider(StrEnum):
     """External providers that may use incompatible symbol formats."""
 
@@ -34,7 +58,7 @@ class SecurityId:
 
     symbol: str
     market: Market
-    exchange: str
+    exchange: Exchange
 
     @property
     def ticker(self) -> str:
@@ -52,7 +76,7 @@ class MarketContext:
     timezone: str
     trading_currency: str
     benchmark_symbol: str
-    trading_calendar: str
+    trading_calendar: TradingCalendar
 
 
 @dataclass(frozen=True, slots=True)

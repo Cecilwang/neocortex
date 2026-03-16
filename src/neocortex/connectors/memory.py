@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from neocortex.connectors.base import DAILY_BAR_INTERVAL
 from neocortex.models.core import (
     CompanyProfile,
-    Market,
-    MarketContext,
     PriceBar,
     SecurityId,
 )
@@ -19,18 +18,12 @@ class InMemoryConnector:
     """Serve normalized models from in-memory collections."""
 
     company_profiles: dict[SecurityId, CompanyProfile] = field(default_factory=dict)
-    market_contexts: dict[Market, MarketContext] = field(default_factory=dict)
     price_bars: dict[SecurityId, tuple[PriceBar, ...]] = field(default_factory=dict)
 
     def get_company_profile(self, security_id: SecurityId) -> CompanyProfile:
         """Return the stored company profile for one security."""
 
-        try:
-            return self.company_profiles[security_id]
-        except KeyError as exc:
-            raise KeyError(
-                f"Missing company profile for {security_id.ticker}."
-            ) from exc
+        return self.company_profiles[security_id]
 
     def get_price_bars(
         self,
@@ -38,28 +31,22 @@ class InMemoryConnector:
         *,
         start_date: date,
         end_date: date,
-        interval: str = "1d",
+        interval: str = DAILY_BAR_INTERVAL,
+        adjust: str | None = None,
     ) -> tuple[PriceBar, ...]:
         """Return stored bars within the requested date range."""
 
-        if interval != "1d":
+        if interval != DAILY_BAR_INTERVAL:
             raise ValueError(
-                "InMemoryConnector currently supports only the 1d interval."
+                f"InMemoryConnector currently supports only the {DAILY_BAR_INTERVAL} interval."
+            )
+        if adjust:
+            raise ValueError(
+                "InMemoryConnector does not support adjusted price series."
             )
 
-        try:
-            bars = self.price_bars[security_id]
-        except KeyError as exc:
-            raise KeyError(f"Missing price bars for {security_id.ticker}.") from exc
+        bars = self.price_bars[security_id]
 
         return tuple(
             bar for bar in bars if start_date <= bar.timestamp.date() <= end_date
         )
-
-    def get_market_context(self, market: Market) -> MarketContext:
-        """Return the stored market context for one market."""
-
-        try:
-            return self.market_contexts[market]
-        except KeyError as exc:
-            raise KeyError(f"Missing market context for {market}.") from exc
