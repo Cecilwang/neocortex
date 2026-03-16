@@ -12,6 +12,7 @@ from neocortex.models.core import (
     Market,
     MarketContext,
     PriceBar,
+    PriceSeries,
     SecurityId,
     SectorBenchmark,
     TradingCalendar,
@@ -37,15 +38,18 @@ def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
             )
         },
         price_bars={
-            security_id: (
-                PriceBar(
-                    security_id=security_id,
-                    timestamp=datetime(2026, 3, 14, 16, 0),
-                    open=210.0,
-                    high=212.0,
-                    low=209.5,
-                    close=211.4,
-                    volume=10_000_000,
+            security_id: PriceSeries(
+                security_id=security_id,
+                bars=(
+                    PriceBar(
+                        security_id=security_id,
+                        timestamp=datetime(2026, 3, 14, 16, 0),
+                        open=210.0,
+                        high=212.0,
+                        low=209.5,
+                        close=211.4,
+                        volume=10_000_000,
+                    ),
                 ),
             )
         },
@@ -96,10 +100,12 @@ def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
         metric_averages={"roe": 0.18},
         constituents=("AAPL", "MSFT"),
     )
+    series = PriceSeries(security_id=security_id, bars=(bar,))
 
     assert profile.security_id.ticker == "US:AAPL"
     assert market_context.trading_calendar is TradingCalendar.XNYS
     assert bar.close == 211.4
+    assert series.closes == (211.4,)
     assert benchmark.metric_averages["roe"] == 0.18
 
 

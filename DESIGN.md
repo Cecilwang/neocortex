@@ -79,6 +79,8 @@ Current implementation status:
 - `connectors/` now defines the normalized connector interface for external data adapters.
 - `connectors/` also includes an in-memory connector for tests, fixtures, and local development.
 - `connectors/` now includes a minimal AkShare connector for CN company profile and daily bars.
+- `connectors/` now return `PriceSeries` as the sequence-level contract for normalized OHLCV data.
+- `indicators/` now defines a minimal indicator registry and calculation engine for SMA, EMA, and RSI series over normalized price bars.
 
 ## Core Data Contracts
 
@@ -87,6 +89,7 @@ The data layer normalizes all sources into these stable objects:
 - `SecurityId`: canonical stock identifier with `symbol + market + exchange`.
 - `MarketContext`: market-level settings such as timezone, calendar, benchmark, and trading currency.
 - `PriceBar`: OHLCV bar plus optional adjusted close.
+- `PriceSeries`: time-ordered `PriceBar` sequence for one security.
 - `FundamentalSnapshot`: raw and derived company fundamentals as of a date.
 - `NewsItem`: title, summary, source, published time, sentiment tags.
 - `MacroSeriesPoint`: named macro observation with frequency and rate-of-change fields.
@@ -185,7 +188,7 @@ macro_agent ------------------------------------------|--> pm_agent
 ## Next Steps
 
 1. Expand connector coverage beyond the minimal AkShare CN loop to fundamentals, benchmarks, and other markets.
-2. Implement the indicator specification registry and calculation engine.
+2. Extend indicator coverage beyond the initial SMA, EMA, and RSI registry.
 3. Implement prompt builders for the technical and quantitative agents first.
 4. Implement agent runtime with schema validation, retries, and trace storage.
 5. Add API and frontend workbench views.

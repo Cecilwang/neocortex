@@ -8,7 +8,7 @@ from datetime import date
 from neocortex.connectors.base import DAILY_BAR_INTERVAL
 from neocortex.models.core import (
     CompanyProfile,
-    PriceBar,
+    PriceSeries,
     SecurityId,
 )
 
@@ -18,7 +18,7 @@ class InMemoryConnector:
     """Serve normalized models from in-memory collections."""
 
     company_profiles: dict[SecurityId, CompanyProfile] = field(default_factory=dict)
-    price_bars: dict[SecurityId, tuple[PriceBar, ...]] = field(default_factory=dict)
+    price_bars: dict[SecurityId, PriceSeries] = field(default_factory=dict)
 
     def get_company_profile(self, security_id: SecurityId) -> CompanyProfile:
         """Return the stored company profile for one security."""
@@ -33,7 +33,7 @@ class InMemoryConnector:
         end_date: date,
         interval: str = DAILY_BAR_INTERVAL,
         adjust: str | None = None,
-    ) -> tuple[PriceBar, ...]:
+    ) -> PriceSeries:
         """Return stored bars within the requested date range."""
 
         if interval != DAILY_BAR_INTERVAL:
@@ -45,8 +45,13 @@ class InMemoryConnector:
                 "InMemoryConnector does not support adjusted price series."
             )
 
-        bars = self.price_bars[security_id]
+        series = self.price_bars[security_id]
 
-        return tuple(
-            bar for bar in bars if start_date <= bar.timestamp.date() <= end_date
+        return PriceSeries(
+            security_id=security_id,
+            bars=tuple(
+                bar
+                for bar in series
+                if start_date <= bar.timestamp.date() <= end_date
+            ),
         )

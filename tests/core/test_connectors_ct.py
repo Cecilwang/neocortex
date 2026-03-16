@@ -9,6 +9,7 @@ from neocortex.models import (
     Exchange,
     Market,
     PriceBar,
+    PriceSeries,
     SecurityId,
 )
 
@@ -32,24 +33,27 @@ def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
             )
         },
         price_bars={
-            security_id: (
-                PriceBar(
-                    security_id=security_id,
-                    timestamp=datetime(2026, 3, 14, 16, 0),
-                    open=210.0,
-                    high=212.0,
-                    low=209.5,
-                    close=211.4,
-                    volume=10_000_000,
-                ),
-                PriceBar(
-                    security_id=security_id,
-                    timestamp=datetime(2026, 3, 15, 16, 0),
-                    open=211.5,
-                    high=214.0,
-                    low=210.8,
-                    close=213.6,
-                    volume=12_000_000,
+            security_id: PriceSeries(
+                security_id=security_id,
+                bars=(
+                    PriceBar(
+                        security_id=security_id,
+                        timestamp=datetime(2026, 3, 14, 16, 0),
+                        open=210.0,
+                        high=212.0,
+                        low=209.5,
+                        close=211.4,
+                        volume=10_000_000,
+                    ),
+                    PriceBar(
+                        security_id=security_id,
+                        timestamp=datetime(2026, 3, 15, 16, 0),
+                        open=211.5,
+                        high=214.0,
+                        low=210.8,
+                        close=213.6,
+                        volume=12_000_000,
+                    ),
                 ),
             )
         },

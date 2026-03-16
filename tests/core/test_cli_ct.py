@@ -1,7 +1,14 @@
 import json
 from datetime import date, datetime
 
-from neocortex.models import CompanyProfile, Exchange, Market, PriceBar, SecurityId
+from neocortex.models import (
+    CompanyProfile,
+    Exchange,
+    Market,
+    PriceBar,
+    PriceSeries,
+    SecurityId,
+)
 
 
 class FakeAkShareConnector:
@@ -31,28 +38,31 @@ class FakeAkShareConnector:
         end_date: date,
         interval: str = "1d",
         adjust: str | None = None,
-    ) -> tuple[PriceBar, ...]:
+    ) -> PriceSeries:
         assert interval == "1d"
         self.last_bars_call = (security_id, start_date, end_date, adjust)
-        return (
-            PriceBar(
-                security_id=security_id,
-                timestamp=datetime(2026, 3, 14, 15, 0),
-                open=1500.0,
-                high=1520.0,
-                low=1498.0,
-                close=1515.0,
-                volume=120000.0,
-            ),
-            PriceBar(
-                security_id=security_id,
-                timestamp=datetime(2026, 3, 15, 15, 0),
-                open=1510.0,
-                high=1533.0,
-                low=1505.0,
-                close=1528.0,
-                volume=110000.0,
-                adjusted_close=1528.0,
+        return PriceSeries(
+            security_id=security_id,
+            bars=(
+                PriceBar(
+                    security_id=security_id,
+                    timestamp=datetime(2026, 3, 14, 15, 0),
+                    open=1500.0,
+                    high=1520.0,
+                    low=1498.0,
+                    close=1515.0,
+                    volume=120000.0,
+                ),
+                PriceBar(
+                    security_id=security_id,
+                    timestamp=datetime(2026, 3, 15, 15, 0),
+                    open=1510.0,
+                    high=1533.0,
+                    low=1505.0,
+                    close=1528.0,
+                    volume=110000.0,
+                    adjusted_close=1528.0,
+                ),
             ),
         )
 
@@ -136,33 +146,40 @@ def test_cli_bars_command_prints_normalized_price_bars(
         "qfq",
     )
     payload = json.loads(capsys.readouterr().out)
-    assert payload == [
-        {
-            "security_id": {
-                "symbol": "600519",
-                "market": "CN",
-                "exchange": "XSHG",
-            },
-            "timestamp": "2026-03-14T15:00:00",
-            "open": 1500.0,
-            "high": 1520.0,
-            "low": 1498.0,
-            "close": 1515.0,
-            "volume": 120000.0,
-            "adjusted_close": None,
+    assert payload == {
+        "security_id": {
+            "symbol": "600519",
+            "market": "CN",
+            "exchange": "XSHG",
         },
-        {
-            "security_id": {
-                "symbol": "600519",
-                "market": "CN",
-                "exchange": "XSHG",
+        "bars": [
+            {
+                "security_id": {
+                    "symbol": "600519",
+                    "market": "CN",
+                    "exchange": "XSHG",
+                },
+                "timestamp": "2026-03-14T15:00:00",
+                "open": 1500.0,
+                "high": 1520.0,
+                "low": 1498.0,
+                "close": 1515.0,
+                "volume": 120000.0,
+                "adjusted_close": None,
             },
-            "timestamp": "2026-03-15T15:00:00",
-            "open": 1510.0,
-            "high": 1533.0,
-            "low": 1505.0,
-            "close": 1528.0,
-            "volume": 110000.0,
-            "adjusted_close": 1528.0,
-        },
-    ]
+            {
+                "security_id": {
+                    "symbol": "600519",
+                    "market": "CN",
+                    "exchange": "XSHG",
+                },
+                "timestamp": "2026-03-15T15:00:00",
+                "open": 1510.0,
+                "high": 1533.0,
+                "low": 1505.0,
+                "close": 1528.0,
+                "volume": 110000.0,
+                "adjusted_close": 1528.0,
+            },
+        ],
+    }

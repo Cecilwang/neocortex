@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 
@@ -104,6 +105,56 @@ class PriceBar:
     close: float
     volume: float
     adjusted_close: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PriceSeries(Sequence[PriceBar]):
+    """Time-ordered price-bar sequence for one security."""
+
+    security_id: SecurityId
+    bars: tuple[PriceBar, ...] = ()
+
+    def __post_init__(self) -> None:
+        previous_timestamp: datetime | None = None
+        seen_timestamps: set[datetime] = set()
+        for bar in self.bars:
+            if bar.security_id != self.security_id:
+                raise ValueError("PriceSeries bars must all share the same security_id.")
+            if previous_timestamp is not None and bar.timestamp < previous_timestamp:
+                raise ValueError("PriceSeries bars must be sorted by timestamp.")
+            if bar.timestamp in seen_timestamps:
+                raise ValueError("PriceSeries bars must not contain duplicate timestamps.")
+            seen_timestamps.add(bar.timestamp)
+            previous_timestamp = bar.timestamp
+
+    def __len__(self) -> int:
+        return len(self.bars)
+
+    def __getitem__(self, index: int) -> PriceBar:
+        return self.bars[index]
+
+    def __iter__(self) -> Iterator[PriceBar]:
+        return iter(self.bars)
+
+    @property
+    def start_timestamp(self) -> datetime | None:
+        if not self.bars:
+            return None
+        return self.bars[0].timestamp
+
+    @property
+    def end_timestamp(self) -> datetime | None:
+        if not self.bars:
+            return None
+        return self.bars[-1].timestamp
+
+    @property
+    def closes(self) -> tuple[float, ...]:
+        return tuple(bar.close for bar in self.bars)
+
+    @property
+    def timestamps(self) -> tuple[datetime, ...]:
+        return tuple(bar.timestamp for bar in self.bars)
 
 
 @dataclass(frozen=True, slots=True)
