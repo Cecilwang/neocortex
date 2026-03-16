@@ -8,6 +8,9 @@ dependencies = [
     "akshare>=1.18.40",
 ]
 
+[project.scripts]
+neocortex = "neocortex.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.0",
