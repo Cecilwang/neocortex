@@ -26,8 +26,11 @@ logger = logging.getLogger(__name__)
 _SUPPORTED_CN_EXCHANGES = frozenset({Exchange.XSHG, Exchange.XSHE})
 _AKSHARE_DAILY_PERIOD = "daily"
 _AKSHARE_DATE_FORMAT = "%Y%m%d"
-_PROFILE_NAME_FIELD = "股票简称"
-_PROFILE_INDUSTRY_FIELD = "行业"
+_EM_PROFILE_NAME_FIELD = "股票简称"
+_EM_PROFILE_INDUSTRY_FIELD = "行业"
+_XUEQIU_NAME_FIELD = "org_short_name_cn"
+_XUEQIU_LEGAL_NAME_FIELD = "org_name_cn"
+_XUEQIU_INDUSTRY_FIELD = "affiliate_industry"
 _BAR_DATE_FIELD = "日期"
 _BAR_OPEN_FIELD = "开盘"
 _BAR_HIGH_FIELD = "最高"
@@ -48,13 +51,27 @@ class AkShareConnector:
 
         symbol = self._symbol_for_request(security_id)
         logger.debug("Fetching AkShare company profile for %s.", security_id.ticker)
-        raw_profile = self._api().stock_individual_info_em(
-            symbol=symbol,
-            timeout=self.timeout,
-        )
+        try:
+            raw_profile = self._api().stock_individual_info_em(
+                symbol=symbol,
+                timeout=self.timeout,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Eastmoney company profile request failed for %s (%s: %s); falling back to Xueqiu.",
+                security_id.ticker,
+                type(exc).__name__,
+                exc,
+            )
+            logger.debug(
+                "Eastmoney company profile traceback for %s.",
+                security_id.ticker,
+                exc_info=True,
+            )
+            return self._get_company_profile_from_xueqiu(security_id)
         profile_items = self._profile_items(raw_profile)
-        company_name = profile_items[_PROFILE_NAME_FIELD]
-        industry = profile_items[_PROFILE_INDUSTRY_FIELD]
+        company_name = str(profile_items[_EM_PROFILE_NAME_FIELD])
+        industry = str(profile_items[_EM_PROFILE_INDUSTRY_FIELD])
         return CompanyProfile(
             security_id=security_id,
             company_name=company_name,
@@ -121,10 +138,42 @@ class AkShareConnector:
             )
         return security_id.symbol
 
+    def _xueqiu_symbol_for_request(self, security_id: SecurityId) -> str:
+        symbol = self._symbol_for_request(security_id)
+        if security_id.exchange is Exchange.XSHG:
+            return f"SH{symbol}"
+        return f"SZ{symbol}"
+
+    def _get_company_profile_from_xueqiu(
+        self, security_id: SecurityId
+    ) -> CompanyProfile:
+        raw_profile = self._api().stock_individual_basic_info_xq(
+            symbol=self._xueqiu_symbol_for_request(security_id),
+            timeout=self.timeout,
+        )
+        profile_items = self._profile_items(raw_profile)
+        company_name = str(
+            profile_items.get(_XUEQIU_NAME_FIELD)
+            or profile_items[_XUEQIU_LEGAL_NAME_FIELD]
+        )
+        industry_value = profile_items[_XUEQIU_INDUSTRY_FIELD]
+        if isinstance(industry_value, dict) and industry_value.get("ind_name") is not None:
+            industry = str(industry_value["ind_name"])
+        else:
+            industry = str(industry_value)
+        return CompanyProfile(
+            security_id=security_id,
+            company_name=company_name,
+            sector=industry,
+            industry=industry,
+            country="CN",
+            currency="CNY",
+        )
+
     @staticmethod
-    def _profile_items(frame: pd.DataFrame) -> dict[str, str]:
+    def _profile_items(frame: pd.DataFrame) -> dict[str, Any]:
         return {
-            str(row["item"]): str(row["value"])
+            str(row["item"]): row["value"]
             for _, row in frame.iterrows()
             if row["item"] is not None and row["value"] is not None
         }

@@ -121,6 +121,36 @@ class MissingProfileFieldAkShareAPI(FakeAkShareAPI):
         )
 
 
+class FailingEastmoneyProfileAkShareAPI(FakeAkShareAPI):
+    def __init__(self) -> None:
+        self.last_xueqiu_symbol: str | None = None
+
+    def stock_individual_info_em(
+        self, symbol: str, timeout: float | None
+    ) -> pd.DataFrame:
+        raise RuntimeError("eastmoney unavailable")
+
+    def stock_individual_basic_info_xq(
+        self, symbol: str, timeout: float | None
+    ) -> pd.DataFrame:
+        self.last_xueqiu_symbol = symbol
+        assert timeout == 3.0
+        return pd.DataFrame(
+            {
+                "item": [
+                    "org_name_cn",
+                    "org_short_name_cn",
+                    "affiliate_industry",
+                ],
+                "value": [
+                    "贵州茅台酒股份有限公司",
+                    "贵州茅台",
+                    {"ind_code": "BK0088", "ind_name": "白酒"},
+                ],
+            }
+        )
+
+
 def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
@@ -145,6 +175,35 @@ def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
     assert bars[1].adjusted_close == 1528.0
     assert market_context.timezone == "Asia/Shanghai"
     assert market_context.benchmark_symbol == "000300.SH"
+
+
+@pytest.mark.parametrize(
+    ("security_id", "expected_symbol"),
+    [
+        (
+            SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG),
+            "SH600519",
+        ),
+        (
+            SecurityId(symbol="000001", market=Market.CN, exchange=Exchange.XSHE),
+            "SZ000001",
+        ),
+    ],
+)
+def test_akshare_connector_falls_back_to_xueqiu_company_profile(
+    security_id: SecurityId,
+    expected_symbol: str,
+) -> None:
+    api = FailingEastmoneyProfileAkShareAPI()
+    connector = AkShareConnector(timeout=3.0, api=api)
+
+    profile = connector.get_company_profile(security_id)
+
+    assert api.last_xueqiu_symbol == expected_symbol
+    assert profile.company_name == "贵州茅台"
+    assert profile.industry == "白酒"
+    assert profile.sector == "白酒"
+    assert profile.currency == "CNY"
 
 
 def test_akshare_connector_rejects_non_cn_security() -> None:
