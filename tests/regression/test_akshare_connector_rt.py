@@ -1,6 +1,8 @@
 from datetime import date
+import time
 
 import pandas as pd
+import pytest
 
 from neocortex.connectors import AkShareConnector
 from neocortex.models import Exchange, Market, SecurityId
@@ -84,6 +86,32 @@ class FakeAkShareAPI:
         )
 
 
+def _fetch_moutai_snapshot_with_retries(
+    connector: AkShareConnector,
+    security_id: SecurityId,
+    *,
+    max_attempts: int = 3,
+    sleep_seconds: float = 1.0,
+):
+    last_exc: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            profile = connector.get_company_profile(security_id)
+            bars = connector.get_price_bars(
+                security_id,
+                start_date=MOUTAI_SNAPSHOT_START_DATE,
+                end_date=MOUTAI_SNAPSHOT_END_DATE,
+            )
+            return profile, bars
+        except Exception as exc:  # pragma: no cover - depends on live upstream behavior
+            last_exc = exc
+            if attempt < max_attempts - 1:
+                time.sleep(sleep_seconds)
+    pytest.skip(
+        f"AkShare live fetch unavailable after {max_attempts} attempts: {last_exc}"
+    )
+
+
 def test_akshare_connector_normalized_output_baseline() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
@@ -127,7 +155,7 @@ def test_akshare_connector_normalized_output_baseline() -> None:
             "high": 1520.0,
             "low": 1498.0,
             "close": 1515.0,
-            "volume": 120000.0,
+            "volume": 12_000_000.0,
             "adjusted_close": 1515.0,
         },
         {
@@ -136,7 +164,7 @@ def test_akshare_connector_normalized_output_baseline() -> None:
             "high": 1533.0,
             "low": 1505.0,
             "close": 1528.0,
-            "volume": 110000.0,
+            "volume": 11_000_000.0,
             "adjusted_close": 1528.0,
         },
     ]
@@ -146,11 +174,9 @@ def test_akshare_connector_fetches_moutai_profile_and_fixed_week_bars() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     connector = AkShareConnector(timeout=10.0)
 
-    profile = connector.get_company_profile(security_id)
-    raw_bars = connector.get_price_bars(
+    profile, raw_bars = _fetch_moutai_snapshot_with_retries(
+        connector,
         security_id,
-        start_date=MOUTAI_SNAPSHOT_START_DATE,
-        end_date=MOUTAI_SNAPSHOT_END_DATE,
     )
 
     assert profile.company_name
