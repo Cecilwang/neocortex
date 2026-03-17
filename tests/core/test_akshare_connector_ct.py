@@ -151,32 +151,6 @@ class FailingEastmoneyProfileAkShareAPI(FakeAkShareAPI):
         )
 
 
-def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
-    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
-    connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
-
-    profile = connector.get_company_profile(security_id)
-    bars = connector.get_price_bars(
-        security_id,
-        start_date=date(2026, 3, 14),
-        end_date=date(2026, 3, 15),
-        adjust="qfq",
-    )
-    market_context = get_market_context(Market.CN)
-
-    assert profile.company_name == "贵州茅台"
-    assert profile.industry == "酿酒行业"
-    assert profile.sector == "酿酒行业"
-    assert profile.currency == "CNY"
-    assert bars.security_id == security_id
-    assert len(bars) == 2
-    assert bars[0].timestamp == datetime(2026, 3, 14, 15, 0)
-    assert bars[1].close == 1528.0
-    assert bars[1].adjusted_close == 1528.0
-    assert market_context.timezone == "Asia/Shanghai"
-    assert market_context.benchmark_symbol == "000300.SH"
-
-
 @pytest.mark.parametrize(
     ("security_id", "expected_symbol"),
     [
@@ -204,6 +178,55 @@ def test_akshare_connector_falls_back_to_xueqiu_company_profile(
     assert profile.industry == "白酒"
     assert profile.sector == "白酒"
     assert profile.currency == "CNY"
+
+class UniverseAkShareAPI(FakeAkShareAPI):
+    def stock_info_a_code_name(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "code": ["600519", "000001"],
+                "name": ["贵州茅台", "平安银行"],
+            }
+        )
+
+def test_akshare_connector_fetches_cn_security_universe() -> None:
+    connector = AkShareConnector(api=UniverseAkShareAPI())
+
+    frame = connector.get_cn_security_list()
+
+    assert frame.to_dict(orient="records") == [
+        {"code": "600519", "name": "贵州茅台"},
+        {"code": "000001", "name": "平安银行"},
+    ]
+
+
+
+def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
+
+    profile = connector.get_company_profile(security_id)
+    bars = connector.get_price_bars(
+        security_id,
+        start_date=date(2026, 3, 14),
+        end_date=date(2026, 3, 15),
+        adjust="qfq",
+    )
+    market_context = get_market_context(Market.CN)
+
+    assert profile.company_name == "贵州茅台"
+    assert profile.industry == "酿酒行业"
+    assert profile.sector == "酿酒行业"
+    assert profile.currency == "CNY"
+    assert bars.security_id == security_id
+    assert len(bars) == 2
+    assert bars[0].timestamp == datetime(2026, 3, 14, 15, 0)
+    assert bars[1].close == 1528.0
+    assert bars[0].volume == 12_000_000.0
+    assert bars[1].adjusted_close == 1528.0
+    assert bars[1].volume == 11_000_000.0
+    assert market_context.timezone == "Asia/Shanghai"
+    assert market_context.benchmark_symbol == "000300.SH"
+
 
 
 def test_akshare_connector_rejects_non_cn_security() -> None:

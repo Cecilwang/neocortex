@@ -37,6 +37,7 @@ _BAR_HIGH_FIELD = "最高"
 _BAR_LOW_FIELD = "最低"
 _BAR_CLOSE_FIELD = "收盘"
 _BAR_VOLUME_FIELD = "成交量"
+_AKSHARE_VOLUME_LOT_SIZE = 100.0
 
 
 @dataclass(slots=True)
@@ -80,6 +81,12 @@ class AkShareConnector:
             country="CN",
             currency="CNY",
         )
+
+    def get_cn_security_list(self) -> pd.DataFrame:
+        """Return the provider's current mainland China A-share code list."""
+
+        logger.debug("Fetching AkShare CN security universe.")
+        return self._api().stock_info_a_code_name()
 
     def get_price_bars(
         self,
@@ -205,7 +212,7 @@ class AkShareConnector:
                     high=float(row[_BAR_HIGH_FIELD]),
                     low=float(row[_BAR_LOW_FIELD]),
                     close=close,
-                    volume=float(row[_BAR_VOLUME_FIELD]),
+                    volume=float(row[_BAR_VOLUME_FIELD]) * _AKSHARE_VOLUME_LOT_SIZE,
                     adjusted_close=close if adjust else None,
                 )
             )
