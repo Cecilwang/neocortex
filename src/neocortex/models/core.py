@@ -6,10 +6,23 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 JsonDict = dict[str, Any]
+
+_PRICE_SERIES_DF_COLUMNS = (
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "adjusted_close",
+)
 
 
 class Market(StrEnum):
@@ -155,6 +168,27 @@ class PriceSeries(Sequence[PriceBar]):
     @property
     def timestamps(self) -> tuple[datetime, ...]:
         return tuple(bar.timestamp for bar in self.bars)
+
+    def to_df(self) -> pd.DataFrame:
+        import pandas as pd
+
+        if not self.bars:
+            return pd.DataFrame(columns=_PRICE_SERIES_DF_COLUMNS)
+        return pd.DataFrame.from_records(
+            (
+                {
+                    "timestamp": bar.timestamp.isoformat(),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "volume": bar.volume,
+                    "adjusted_close": bar.adjusted_close,
+                }
+                for bar in self.bars
+            ),
+            columns=_PRICE_SERIES_DF_COLUMNS,
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -145,41 +145,31 @@ def test_cli_bars_command_prints_normalized_price_bars(
         date(2026, 3, 15),
         "qfq",
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload == {
-        "security_id": {
-            "symbol": "600519",
-            "market": "CN",
-            "exchange": "XSHG",
-        },
-        "bars": [
-            {
-                "security_id": {
-                    "symbol": "600519",
-                    "market": "CN",
-                    "exchange": "XSHG",
-                },
-                "timestamp": "2026-03-14T15:00:00",
-                "open": 1500.0,
-                "high": 1520.0,
-                "low": 1498.0,
-                "close": 1515.0,
-                "volume": 120000.0,
-                "adjusted_close": None,
-            },
-            {
-                "security_id": {
-                    "symbol": "600519",
-                    "market": "CN",
-                    "exchange": "XSHG",
-                },
-                "timestamp": "2026-03-15T15:00:00",
-                "open": 1510.0,
-                "high": 1533.0,
-                "low": 1505.0,
-                "close": 1528.0,
-                "volume": 110000.0,
-                "adjusted_close": 1528.0,
-            },
-        ],
-    }
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[0].split() == [
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "adjusted_close",
+    ]
+    assert lines[1].split() == [
+        "2026-03-14T15:00:00",
+        "1500.0",
+        "1520.0",
+        "1498.0",
+        "1515.0",
+        "120000.0",
+        "NaN",
+    ]
+    assert lines[2].split() == [
+        "2026-03-15T15:00:00",
+        "1510.0",
+        "1533.0",
+        "1505.0",
+        "1528.0",
+        "110000.0",
+        "1528.0",
+    ]
