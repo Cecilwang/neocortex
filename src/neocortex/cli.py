@@ -3,30 +3,16 @@
 from __future__ import annotations
 
 import argparse
-import json
-from dataclasses import asdict, is_dataclass
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Sequence
 
 from neocortex.connectors import AkShareConnector
 from neocortex.models import Exchange, Market, SecurityId
+from neocortex.serialization import to_pretty_json
 
 
 def _parse_date(value: str) -> date:
     return date.fromisoformat(value)
-
-
-def _json_ready(value: Any) -> Any:
-    if is_dataclass(value):
-        return _json_ready(asdict(value))
-    if isinstance(value, dict):
-        return {key: _json_ready(item) for key, item in value.items()}
-    if isinstance(value, tuple | list):
-        return [_json_ready(item) for item in value]
-    if isinstance(value, datetime | date):
-        return value.isoformat()
-    return value
-
 
 def _build_cn_security_id(args: argparse.Namespace) -> SecurityId:
     return SecurityId(
@@ -37,7 +23,7 @@ def _build_cn_security_id(args: argparse.Namespace) -> SecurityId:
 
 
 def _emit_json(payload: Any) -> None:
-    print(json.dumps(_json_ready(payload), ensure_ascii=False, indent=2))
+    print(to_pretty_json(payload))
 
 
 def _run_akshare_profile(args: argparse.Namespace) -> int:

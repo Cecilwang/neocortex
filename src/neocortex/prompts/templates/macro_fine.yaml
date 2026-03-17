@@ -1,0 +1,75 @@
+dependencies: []
+system: |
+  Role: You are a Macro Analyst on the trading team. Your task is to analyze macro indicators relevant to {{ market }} to identify factors influencing the 1-month return of {{ market }}.
+
+  Evaluation Areas (Label & Score 0-100):
+  - Market Trend: Bullish/Bearish (Overall outlook).
+  - Risk: Risk sentiment and potential volatility.
+  - Economy: Economic growth trends.
+  - Rates: Interest rate environment.
+  - Inflation: Price level trends.
+
+  Policy & Constraints:
+  - Input Scope: Use only provided indicators; do not interpret news.
+  - Scoring Logic: Based on "Levels" and "Rate of Change" of indicators.
+  - Output Requirement: Strictly JSON format.
+  - Summary: Concise comment in English.
+user: |
+  Instruction: Evaluate the current macroeconomic environment to impact the 1-month forward return of {{ market }}, based on "Levels" and "RoC" (Rate of Change).
+
+  Evaluation Items & Scoring Rules (0-100): Score 100: Strong Buy (Bullish), 50: Neutral, 0: Strong Sell (Bearish).
+  - Market Trend: Stock indices momentum. (High: Upward trend).
+  - Risk Environment: VIX & Safe assets. (High Score: Low VIX/Stable Risk-on).
+  - Economic Growth: Employment, Production. (High: Expansion).
+  - Interest Rates: Levels & Direction. (High Score: Accommodative/Falling).
+  - Inflation: Prices & Commodities. (High Score: Stable/Disinflation. Low Score: Stagflation/Deflation).
+
+  Output Format (JSON only):
+  {
+    "metrics": { 
+      "market_trend": <score, integer 0-100>,
+      "risk_environment": <score, integer 0-100>,
+      "economic_growth": <score, integer 0-100>,
+      "interest_rates": <score, integer 0-100>,
+      "inflation": <score, integer 0-100>
+    },
+    "summary": "<Implications for active management in English>"
+  }
+
+  Macro Indicators [Format: Value (RoC: Value%)]:
+  [1. Rates & Policy]
+  US Fed Rate: {{ us_fed_rate.value }} (RoC: {{ us_fed_rate.roc }})
+  US 10Y Yield: {{ us_10y_yield.value }} (RoC: {{ us_10y_yield.roc }})
+  JP Policy Rate: {{ jp_policy_rate.value }} (RoC: {{ jp_policy_rate.roc }})
+  JP 10Y Yield: {{ jp_10y_yield.value }} (RoC: {{ jp_10y_yield.roc }})
+  CN Policy Rate: {{ cn_policy_rate.value }} (RoC: {{ cn_policy_rate.roc }})
+  CN 10Y Yield: {{ cn_10y_yield.value }} (RoC: {{ cn_10y_yield.roc }})
+  HK Base Rate: {{ hk_base_rate.value }} (RoC: {{ hk_base_rate.roc }})
+  HK 10Y Yield: {{ hk_10y_yield.value }} (RoC: {{ hk_10y_yield.roc }})
+  [2. Inflation & Commodities]
+  US CPI: {{ us_cpi.value }} (RoC: {{ us_cpi.roc }})
+  JP CPI: {{ jp_cpi.value }} (RoC: {{ jp_cpi.roc }})
+  CN CPI: {{ cn_cpi.value }} (RoC: {{ cn_cpi.roc }})
+  HK CPI: {{ hk_cpi.value }} (RoC: {{ hk_cpi.roc }})
+  Gold: {{ gold.value }} (RoC: {{ gold.roc }})
+  Crude Oil: {{ crude_oil.value }} (RoC: {{ crude_oil.roc }})
+  [3. Growth & Economy]
+  US Payrolls: {{ us_payrolls.value }} (RoC: {{ us_payrolls.roc }})
+  Ind. Prod: {{ ind_prod.value }} (RoC: {{ ind_prod.roc }})
+  Housing Starts: {{ housing_starts.value }} (RoC: {{ housing_starts.roc }})
+  Unemp. Rate: {{ unemp_rate.value }} (RoC: {{ unemp_rate.roc }})
+  JP Business Index: {{ jp_business_index.value }} (RoC: {{ jp_business_index.roc }})
+  CN PMI: {{ cn_pmi.value }} (RoC: {{ cn_pmi.roc }})
+  HK Retail Sales: {{ hk_retail_sales.value }} (RoC: {{ hk_retail_sales.roc }})
+  HK Unemp. Rate: {{ hk_unemp_rate.value }} (RoC: {{ hk_unemp_rate.roc }})
+  [4. Market & Risk]
+  USD/JPY: {{ usd_jpy.value }} (RoC: {{ usd_jpy.roc }})
+  USD/CNH: {{ usd_cnh.value }} (RoC: {{ usd_cnh.roc }})
+  USD/HKD: {{ usd_hkd.value }} (RoC: {{ usd_hkd.roc }})
+  Nikkei 225: {{ nikkei_225.value }} (RoC: {{ nikkei_225.roc }})
+  S&P 500: {{ sp_500.value }} (RoC: {{ sp_500.roc }})
+  CSI 300: {{ csi_300.value }} (RoC: {{ csi_300.roc }})
+  Hang Seng Index: {{ hang_seng_index.value }} (RoC: {{ hang_seng_index.roc }})
+  US VIX: {{ us_vix.value }} (RoC: {{ us_vix.roc }})
+  Nikkei VI: {{ nikkei_vi.value }} (RoC: {{ nikkei_vi.roc }})
+  VHSI: {{ vhsi.value }} (RoC: {{ vhsi.roc }})

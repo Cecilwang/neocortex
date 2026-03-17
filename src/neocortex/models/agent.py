@@ -37,13 +37,12 @@ class ResponseValidationStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class AgentRequest:
-    """Structured input passed into an agent-specific prompt builder."""
+    """Structured input passed into an agent object for prompt rendering."""
 
     request_id: str
     agent: AgentRole
     security_id: SecurityId
     as_of_date: date
-    schema_version: str
     payload: JsonDict = field(default_factory=dict)
     dependencies: tuple[AgentRole, ...] = ()
 
@@ -56,7 +55,6 @@ class AgentResponse:
     agent: AgentRole
     security_id: SecurityId
     as_of_date: date
-    schema_version: str
     reasoning: str
 
     score: float | None
@@ -70,7 +68,6 @@ class AgentExecutionTrace:
 
     request: AgentRequest
     response: AgentResponse | None
-    prompt_version: str
     inference_config: LLMInferenceConfig
     started_at: datetime
     finished_at: datetime | None = None

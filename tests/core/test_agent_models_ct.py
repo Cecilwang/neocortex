@@ -26,7 +26,6 @@ def test_agent_trace_captures_request_and_response_contract(
         agent=AgentRole.TECHNICAL,
         security_id=security_id,
         as_of_date=date(2026, 3, 15),
-        schema_version="v1",
         payload={"roc_20d": 0.12},
     )
     response = AgentResponse(
@@ -34,7 +33,6 @@ def test_agent_trace_captures_request_and_response_contract(
         agent=AgentRole.TECHNICAL,
         security_id=security_id,
         as_of_date=date(2026, 3, 15),
-        schema_version="v1",
         reasoning="Momentum remains constructive.",
         score=74.0,
         confidence=0.81,
@@ -42,7 +40,6 @@ def test_agent_trace_captures_request_and_response_contract(
     trace = AgentExecutionTrace(
         request=request,
         response=response,
-        prompt_version="technical-v1",
         inference_config=LLMInferenceConfig(
             endpoint=LLMEndpoint(
                 service=LLMService.OPENAI,
