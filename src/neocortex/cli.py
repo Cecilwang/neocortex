@@ -26,6 +26,10 @@ def _emit_json(payload: Any) -> None:
     print(to_pretty_json(payload))
 
 
+def _emit_dataframe(payload: Any) -> None:
+    print(payload.to_string(index=False))
+
+
 def _run_akshare_profile(args: argparse.Namespace) -> int:
     connector = AkShareConnector(timeout=args.timeout)
     profile = connector.get_company_profile(_build_cn_security_id(args))
@@ -41,7 +45,7 @@ def _run_akshare_bars(args: argparse.Namespace) -> int:
         end_date=args.end_date,
         adjust=args.adjust,
     )
-    _emit_json(bars)
+    _emit_dataframe(bars.to_df())
     return 0
 
 

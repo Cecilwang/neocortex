@@ -109,6 +109,37 @@ def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
     assert benchmark.metric_averages["roe"] == 0.18
 
 
+def test_price_series_to_df_uses_price_bar_columns(security_id: SecurityId) -> None:
+    series = PriceSeries(
+        security_id=security_id,
+        bars=(
+            PriceBar(
+                security_id=security_id,
+                timestamp=datetime(2026, 3, 15, 9, 30),
+                open=210.0,
+                high=212.0,
+                low=208.5,
+                close=211.4,
+                volume=10_000_000,
+            ),
+        ),
+    )
+
+    frame = series.to_df()
+
+    assert frame.to_dict(orient="records") == [
+        {
+            "timestamp": "2026-03-15T09:30:00",
+            "open": 210.0,
+            "high": 212.0,
+            "low": 208.5,
+            "close": 211.4,
+            "volume": 10_000_000,
+            "adjusted_close": None,
+        }
+    ]
+
+
 def test_fundamental_snapshot_tracks_source_provider_without_symbol_mapping(
     security_id: SecurityId,
 ) -> None:
