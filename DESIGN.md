@@ -39,10 +39,11 @@ The system is split into four layers:
    - Market-aware adapters handle symbol format and exchange mapping around upstream APIs.
 2. Feature layer
    - Indicator engine computes technical and financial features.
-   - Prompt builders convert normalized data and indicators into agent-ready payloads.
+   - Jinja-backed prompt templates convert normalized data into appendix-aligned agent prompts.
 3. Agent layer
    - The LLM component manages endpoint configuration, authentication env vars, and request-level inference parameters.
-   - Specialized agents consume structured prompt inputs and return validated JSON outputs.
+   - One object-oriented agent is implemented per `AgentRole`.
+   - Agents build request payloads, render prompts, send model requests, and parse validated JSON outputs.
    - The orchestration layer routes outputs through a fixed hierarchy.
 4. Application layer
    - API exposes data, indicators, and agent traces.
@@ -81,6 +82,9 @@ Current implementation status:
 - `connectors/` now includes a minimal AkShare connector for CN company profile and daily bars.
 - `connectors/` now return `PriceSeries` as the sequence-level contract for normalized OHLCV data.
 - `indicators/` now defines a minimal indicator registry and calculation engine for SMA, EMA, and RSI series over normalized price bars.
+- `prompts/` now defines Jinja templates derived from Appendix B and strict rendering helpers.
+- `agents/` now defines one concrete agent per `AgentRole`, each responsible for request construction, prompt rendering, model transport, and response parsing.
+- `pipeline/` now defines an orchestrator that owns the paper-inspired execution graph and inter-agent data flow.
 
 ## Core Data Contracts
 
@@ -137,6 +141,14 @@ This protocol supports:
 - Frontend visualization of intermediate agent outputs
 - Schema validation and controlled retries
 
+Current agent implementation policy:
+
+- Each `AgentRole` maps to one concrete agent object rather than a pair of standalone `build_*` and `render_*` functions.
+- `Agent.build_request(...)` normalizes typed inputs into `AgentRequest.payload`.
+- `Agent.get_prompt(...)` renders a Jinja template using only the variables actually referenced by the appendix-derived template.
+- `Agent.send(...)` owns LLM invocation and JSON parsing for that role.
+- `AgentOrchestrator` owns upstream/downstream routing; agents must not call each other directly.
+
 Response schema policy:
 
 - Keep the shared response contract minimal.
@@ -189,6 +201,6 @@ macro_agent ------------------------------------------|--> pm_agent
 
 1. Expand connector coverage beyond the minimal AkShare CN loop to fundamentals, benchmarks, and other markets.
 2. Extend indicator coverage beyond the initial SMA, EMA, and RSI registry.
-3. Implement prompt builders for the technical and quantitative agents first.
-4. Implement agent runtime with schema validation, retries, and trace storage.
+3. Broaden the appendix-derived templates and agent inputs to richer fundamentals, news, sector, and macro data.
+4. Strengthen runtime behavior with schema validation, retries, and trace storage.
 5. Add API and frontend workbench views.

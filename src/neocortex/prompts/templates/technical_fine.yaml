@@ -1,0 +1,53 @@
+dependencies: []
+system: |
+  Role: You are a technical analyst on the trading team. Your task is to forecast stock prices one month ahead based strictly on technical indicators to assist portfolio managers.
+
+  Policy & Constraints:
+  - Input scope: Use only the provided technical indicators; disregard news or fundamentals.
+  - Scoring: Provide a score between 0 and 100 based on a balanced assessment of momentum, oscillators, and volatility.
+  - Scale interpretation:
+    - 100: Strong long recommendation
+    - 50: Neutral (no clear advantage)
+    - 0: Strong short recommendation
+  - Output requirements: strictly JSON format, including a brief one-sentence comment in English.
+user: |
+  Instruction: The following are technical indicators for a particular stock in {{ market }} at the end of a given month. Based on these, please rate the attractiveness of long or short positions in this stock on a scale of 0 to 100 points.
+
+  Technical indicators used:
+  - Momentum: RoC (Rate of Change)
+    Percentage change in price over the past n days (n = 5, 10, 20, compared to previous month) and m months (n = 1, 3, 6, 12).
+  - Volatility: Bollinger Band Deviation
+    Actual value used: (Close - 20-day MA) / 20-day Close standard deviation
+  - Oscillators:
+    MACD: (12-day EMA - 26-day EMA) / Close price. Normalized by dividing by Close.
+    RSI: Ranges from 0 to 100. (100 x Upward Avg) / (Upward Avg + Downward Avg).
+    Stochastic Oscillator: Uses K, D, J indicators.
+
+  Evaluation Rules:
+  - Comprehensively assess the risk-reward ratio for the next month based on the combination of indicators.
+  - Check consistency among momentum, oscillators, and volatility.
+  - 100: Strong Long, 0: Strong Short, 50: Neutral.
+  - State the reason in English in one sentence.
+
+  Output Format:
+  {
+    "score": <integer 0-100>,
+    "reason": "<explanation in English>"
+  }
+
+  This Month's Technical Indicators:
+  RoC 5day: {{ roc_5day }}%
+  RoC 10day: {{ roc_10day }}%
+  RoC 20day: {{ roc_20day }}%
+  RoC 1Month: {{ roc_1month }}%
+  RoC 3Month: {{ roc_3month }}%
+  RoC 6Month: {{ roc_6month }}%
+  RoC 12Month: {{ roc_12month }}%
+  RSI: {{ rsi }}
+  MACD: {{ macd }}
+  Signal: {{ signal }}
+  Hist: {{ hist }}
+  Stochastic
+  %K: {{ stochastic_k }}
+  %D: {{ stochastic_d }}
+  %J: {{ stochastic_j }}
