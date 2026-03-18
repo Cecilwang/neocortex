@@ -55,9 +55,6 @@ def _run_akshare_bars(args: argparse.Namespace) -> int:
 
 
 def _run_feishu_longconn(args: argparse.Namespace) -> int:
-    if args.env_file is not None:
-        load_dotenv(args.env_file, override=True)
-    configure_logging(args.log_level)
     settings = FeishuSettings.from_env()
     runner = FeishuLongConnectionRunner(settings)
     runner.start()
@@ -66,6 +63,12 @@ def _run_feishu_longconn(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="neocortex")
+    parser.add_argument("--env-file", default=None)
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+    )
     subcommands = parser.add_subparsers(dest="provider", required=True)
 
     akshare_parser = subcommands.add_parser("akshare")
@@ -90,12 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
     feishu_commands = feishu_parser.add_subparsers(dest="command", required=True)
 
     longconn_parser = feishu_commands.add_parser("longconn")
-    longconn_parser.add_argument("--env-file", default=None)
-    longconn_parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
-    )
     longconn_parser.set_defaults(handler=_run_feishu_longconn)
 
     return parser
@@ -104,4 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    configure_logging(args.log_level)
+    if args.env_file is not None:
+        load_dotenv(args.env_file, override=True)
     return args.handler(args)
