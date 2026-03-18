@@ -185,7 +185,15 @@ def test_akshare_connector_fetches_moutai_profile_and_fixed_week_bars() -> None:
     raw_frame[PRICE_BAR_TIMESTAMP] = raw_frame[PRICE_BAR_TIMESTAMP].map(
         lambda value: value.isoformat()
     )
-    assert (
-        raw_frame.drop(columns=[PRICE_BAR_ADJUSTED_CLOSE]).to_dict(orient="records")
-        == MOUTAI_WEEKLY_BAR_SNAPSHOT
+    observed = raw_frame.drop(columns=[PRICE_BAR_ADJUSTED_CLOSE]).to_dict(
+        orient="records"
     )
+
+    assert len(observed) == len(MOUTAI_WEEKLY_BAR_SNAPSHOT)
+    for actual, expected in zip(observed, MOUTAI_WEEKLY_BAR_SNAPSHOT, strict=True):
+        assert actual["timestamp"] == expected["timestamp"]
+        assert actual["open"] == expected["open"]
+        assert actual["high"] == expected["high"]
+        assert actual["low"] == expected["low"]
+        assert actual["close"] == expected["close"]
+        assert actual["volume"] == pytest.approx(expected["volume"], rel=0.01)

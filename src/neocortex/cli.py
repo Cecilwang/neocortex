@@ -7,8 +7,10 @@ from datetime import date
 from typing import Any, Sequence
 
 import pandas as pd
-
+from neocortex.config.env import load_dotenv
 from neocortex.connectors import AkShareConnector
+from neocortex.feishu import FeishuLongConnectionRunner, FeishuSettings
+from neocortex.log import configure_logging
 from neocortex.models import Exchange, Market, SecurityId
 from neocortex.serialization import to_pretty_json
 
@@ -52,6 +54,16 @@ def _run_akshare_bars(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_feishu_longconn(args: argparse.Namespace) -> int:
+    if args.env_file is not None:
+        load_dotenv(args.env_file, override=True)
+    configure_logging(args.log_level)
+    settings = FeishuSettings.from_env()
+    runner = FeishuLongConnectionRunner(settings)
+    runner.start()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="neocortex")
     subcommands = parser.add_subparsers(dest="provider", required=True)
@@ -73,6 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
     bars_parser.add_argument("--adjust", default=None)
     bars_parser.add_argument("--timeout", type=float, default=None)
     bars_parser.set_defaults(handler=_run_akshare_bars)
+
+    feishu_parser = subcommands.add_parser("feishu")
+    feishu_commands = feishu_parser.add_subparsers(dest="command", required=True)
+
+    longconn_parser = feishu_commands.add_parser("longconn")
+    longconn_parser.add_argument("--env-file", default=None)
+    longconn_parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+    )
+    longconn_parser.set_defaults(handler=_run_feishu_longconn)
 
     return parser
 

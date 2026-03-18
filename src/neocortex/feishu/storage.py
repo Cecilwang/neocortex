@@ -1,0 +1,136 @@
+"""SQLite-backed persistence helpers for Feishu events and jobs."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlalchemy.exc import IntegrityError
+
+from neocortex.feishu.models import FeishuJobRecord, JobStatus
+from neocortex.storage.company_profiles import utc_now_iso
+from neocortex.storage.models import (
+    Base,
+    FeishuEventReceiptRow,
+    FeishuJobRow,
+    SessionFactory,
+    create_sqlite_engine,
+)
+
+
+class FeishuBotStore:
+    """Persist processed event receipts and async job state."""
+
+    def __init__(self, db_path: str | Path) -> None:
+        self.engine = create_sqlite_engine(db_path)
+        self.session_factory = SessionFactory(bind=self.engine, expire_on_commit=False)
+        Base.metadata.create_all(self.engine)
+
+    def record_event(self, *, event_id: str, message_id: str) -> bool:
+        """Store one event receipt and return whether it was new."""
+
+        with self.session_factory() as session:
+            session.add(
+                FeishuEventReceiptRow(
+                    event_id=event_id,
+                    message_id=message_id,
+                    received_at=utc_now_iso(),
+                )
+            )
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                return False
+        return True
+
+    def create_job(
+        self,
+        *,
+        command_name: str,
+        command_text: str,
+        chat_id: str,
+        user_open_id: str,
+    ) -> FeishuJobRecord:
+        """Create one queued async job."""
+
+        row = FeishuJobRow(
+            command_name=command_name,
+            command_text=command_text,
+            chat_id=chat_id,
+            user_open_id=user_open_id,
+            status=JobStatus.QUEUED.value,
+            submitted_at=utc_now_iso(),
+        )
+        with self.session_factory() as session:
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return _to_job_record(row)
+
+    def get_job(self, job_id: int) -> FeishuJobRecord | None:
+        """Load one job by id."""
+
+        with self.session_factory() as session:
+            row = session.get(FeishuJobRow, job_id)
+            if row is None:
+                return None
+            return _to_job_record(row)
+
+    def mark_job_running(self, job_id: int) -> None:
+        """Mark one job as running."""
+
+        with self.session_factory() as session:
+            row = session.get(FeishuJobRow, job_id)
+            if row is None:
+                return
+            row.status = JobStatus.RUNNING.value
+            row.started_at = utc_now_iso()
+            session.commit()
+
+    def mark_job_succeeded(
+        self, job_id: int, *, result_text: str
+    ) -> FeishuJobRecord | None:
+        """Mark one job as succeeded and persist the rendered output."""
+
+        with self.session_factory() as session:
+            row = session.get(FeishuJobRow, job_id)
+            if row is None:
+                return None
+            row.status = JobStatus.SUCCEEDED.value
+            row.result_text = result_text
+            row.finished_at = utc_now_iso()
+            session.commit()
+            session.refresh(row)
+            return _to_job_record(row)
+
+    def mark_job_failed(
+        self, job_id: int, *, error_text: str
+    ) -> FeishuJobRecord | None:
+        """Mark one job as failed and persist the failure reason."""
+
+        with self.session_factory() as session:
+            row = session.get(FeishuJobRow, job_id)
+            if row is None:
+                return None
+            row.status = JobStatus.FAILED.value
+            row.error_text = error_text
+            row.finished_at = utc_now_iso()
+            session.commit()
+            session.refresh(row)
+            return _to_job_record(row)
+
+
+def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:
+    return FeishuJobRecord(
+        id=row.id,
+        command_name=row.command_name,
+        command_text=row.command_text,
+        chat_id=row.chat_id,
+        user_open_id=row.user_open_id,
+        status=JobStatus(row.status),
+        submitted_at=row.submitted_at,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        result_text=row.result_text,
+        error_text=row.error_text,
+    )

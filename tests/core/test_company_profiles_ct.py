@@ -330,7 +330,7 @@ def test_backfill_company_profiles_supports_multithreaded_fetching(
 
 
 def test_default_db_path_points_to_shared_repo_database() -> None:
-    expected = Path("/tmp/stock-akshare-profile-cache") / "data" / "neocortex.sqlite3"
+    expected = Path(__file__).resolve().parents[2] / "data" / "neocortex.sqlite3"
 
     assert DEFAULT_DB_PATH == expected
     assert DEFAULT_STORAGE_CONFIG.db_path == expected
