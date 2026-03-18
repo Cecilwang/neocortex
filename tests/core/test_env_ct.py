@@ -49,3 +49,27 @@ def test_feishu_settings_use_default_storage_db_path(monkeypatch) -> None:
     settings = FeishuSettings.from_env()
 
     assert settings.db_path == DEFAULT_DB_PATH
+
+
+def test_feishu_settings_do_not_load_default_dotenv_implicitly(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "FEISHU_APP_ID=cli_from_dotenv",
+                "FEISHU_APP_SECRET=secret_from_dotenv",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+
+    try:
+        FeishuSettings.from_env()
+    except KeyError as error:
+        assert error.args == ("FEISHU_APP_ID",)
+    else:
+        raise AssertionError("FeishuSettings.from_env() unexpectedly loaded .env")

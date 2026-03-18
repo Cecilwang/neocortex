@@ -6,7 +6,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from neocortex.config.env import load_dotenv
 from neocortex.storage.config import DEFAULT_DB_PATH
 
 
@@ -30,7 +29,6 @@ class FeishuSettings:
     def from_env(cls) -> FeishuSettings:
         """Load required settings from environment variables."""
 
-        load_dotenv()
         app_id = os.environ["FEISHU_APP_ID"]
         app_secret = os.environ["FEISHU_APP_SECRET"]
         admin_open_ids = _split_csv(os.environ.get("FEISHU_ADMIN_OPEN_IDS", ""))

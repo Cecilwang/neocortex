@@ -213,7 +213,7 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
     monkeypatch.setattr(cli, "FeishuLongConnectionRunner", FakeRunner)
 
     exit_code = cli.main(
-        ["feishu", "longconn", "--env-file", ".env.local", "--log-level", "DEBUG"]
+        ["--env-file", ".env.local", "--log-level", "DEBUG", "feishu", "longconn"]
     )
 
     assert exit_code == 0
@@ -224,3 +224,34 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
         "settings": fake_settings,
         "started": True,
     }
+
+
+def test_cli_akshare_commands_accept_shared_logging_args(monkeypatch, capsys) -> None:
+    from neocortex import cli
+
+    fake_connector = FakeAkShareConnector()
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(cli, "AkShareConnector", lambda timeout=None: fake_connector)
+    monkeypatch.setattr(
+        cli,
+        "configure_logging",
+        lambda level: captured.update({"log_level": level}),
+    )
+
+    exit_code = cli.main(
+        [
+            "--log-level",
+            "WARNING",
+            "akshare",
+            "profile",
+            "--symbol",
+            "600519",
+            "--exchange",
+            "XSHG",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured == {"log_level": "WARNING"}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["company_name"] == "贵州茅台"
