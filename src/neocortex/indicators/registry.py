@@ -2,46 +2,32 @@
 
 from __future__ import annotations
 
-from neocortex.indicators.core import (
-    Indicator,
-    IndicatorSeries,
-    IndicatorSpec,
-)
+from neocortex.indicators.core import Indicator, IndicatorSpec
 from neocortex.indicators.ema import ema
+from neocortex.indicators.macd import macd
 from neocortex.indicators.rsi import rsi
 from neocortex.indicators.sma import sma
 from neocortex.models.core import PriceSeries
 
 
-_INDICATORS: dict[str, Indicator] = {
+_INDICATORS: dict[str, IndicatorSpec] = {
     "sma": sma,
     "ema": ema,
     "rsi": rsi,
+    "macd": macd,
 }
 
 
-def list_indicators() -> tuple[Indicator, ...]:
+def list_indicator_specs() -> tuple[IndicatorSpec, ...]:
     """Return all built-in indicators in stable registry order."""
 
     return tuple(_INDICATORS.values())
 
 
-def get_indicator(key: str) -> Indicator:
+def get_indicator_spec(key: str) -> IndicatorSpec:
     """Return one concrete indicator implementation."""
 
     return _INDICATORS[key]
-
-
-def list_indicator_specs() -> tuple[IndicatorSpec, ...]:
-    """Return the public metadata for all built-in indicators."""
-
-    return tuple(indicator.spec for indicator in list_indicators())
-
-
-def get_indicator_spec(key: str) -> IndicatorSpec:
-    """Return one indicator metadata record."""
-
-    return get_indicator(key).spec
 
 
 def calculate_indicator(
@@ -49,8 +35,8 @@ def calculate_indicator(
     bars: PriceSeries,
     *,
     parameters: object | None = None,
-) -> IndicatorSeries:
+) -> Indicator:
     """Calculate one indicator series over normalized price bars."""
 
-    indicator = get_indicator(key)
+    indicator = get_indicator_spec(key)
     return indicator.calculate(bars, parameters=parameters)

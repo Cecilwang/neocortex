@@ -5,7 +5,13 @@ import pandas as pd
 import pytest
 
 from neocortex.connectors import AkShareConnector
-from neocortex.models import Exchange, Market, SecurityId
+from neocortex.models import (
+    Exchange,
+    Market,
+    PRICE_BAR_ADJUSTED_CLOSE,
+    PRICE_BAR_TIMESTAMP,
+    SecurityId,
+)
 
 
 MOUTAI_SNAPSHOT_START_DATE = date(2026, 3, 9)
@@ -137,18 +143,11 @@ def test_akshare_connector_normalized_output_baseline() -> None:
         "industry": "酿酒行业",
         "currency": "CNY",
     }
-    assert [
-        {
-            "timestamp": bar.timestamp.isoformat(),
-            "open": bar.open,
-            "high": bar.high,
-            "low": bar.low,
-            "close": bar.close,
-            "volume": bar.volume,
-            "adjusted_close": bar.adjusted_close,
-        }
-        for bar in bars
-    ] == [
+    bars_frame = bars.bars.copy()
+    bars_frame[PRICE_BAR_TIMESTAMP] = bars_frame[PRICE_BAR_TIMESTAMP].map(
+        lambda value: value.isoformat()
+    )
+    assert bars_frame.to_dict(orient="records") == [
         {
             "timestamp": "2026-03-14T15:00:00",
             "open": 1500.0,
@@ -182,14 +181,11 @@ def test_akshare_connector_fetches_moutai_profile_and_fixed_week_bars() -> None:
     assert profile.company_name
     assert "茅台" in profile.company_name
     assert profile.currency == "CNY"
-    assert [
-        {
-            "timestamp": bar.timestamp.isoformat(),
-            "open": bar.open,
-            "high": bar.high,
-            "low": bar.low,
-            "close": bar.close,
-            "volume": bar.volume,
-        }
-        for bar in raw_bars
-    ] == MOUTAI_WEEKLY_BAR_SNAPSHOT
+    raw_frame = raw_bars.bars.copy()
+    raw_frame[PRICE_BAR_TIMESTAMP] = raw_frame[PRICE_BAR_TIMESTAMP].map(
+        lambda value: value.isoformat()
+    )
+    assert (
+        raw_frame.drop(columns=[PRICE_BAR_ADJUSTED_CLOSE]).to_dict(orient="records")
+        == MOUTAI_WEEKLY_BAR_SNAPSHOT
+    )

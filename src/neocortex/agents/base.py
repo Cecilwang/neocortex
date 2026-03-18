@@ -66,14 +66,18 @@ class Agent(ABC):
         """Render the system prompt for one request."""
 
         if request.agent is not self.role:
-            raise ValueError(f"{self.__class__.__name__} requires a {self.role} request.")
+            raise ValueError(
+                f"{self.__class__.__name__} requires a {self.role} request."
+            )
         return render_prompt_text(self.system_prompt, **request.payload)
 
     def get_user_prompt(self, request: AgentRequest) -> str:
         """Render the user prompt for one request."""
 
         if request.agent is not self.role:
-            raise ValueError(f"{self.__class__.__name__} requires a {self.role} request.")
+            raise ValueError(
+                f"{self.__class__.__name__} requires a {self.role} request."
+            )
         return render_prompt_text(self.user_prompt, **request.payload)
 
     def send(

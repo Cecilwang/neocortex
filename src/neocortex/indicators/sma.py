@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import pandas as pd
 
 from neocortex.indicators.core import (
+    Indicator,
     IndicatorParams,
-    IndicatorPoint,
-    IndicatorSeries,
     IndicatorSpec,
 )
-from neocortex.models.core import PriceSeries
+from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,16 +25,15 @@ class SMAParams(IndicatorParams):
 
 
 @dataclass(frozen=True, slots=True)
-class SMAIndicator:
+class SMAIndicator(IndicatorSpec):
     """Calculate a simple moving average over close prices."""
 
-    spec: IndicatorSpec = IndicatorSpec(
-        key="sma",
-        display_name="Simple Moving Average",
-        category="trend",
-        input_field="close",
-        formula="Average of the last N closing prices.",
-        interpretation="Smooths price noise and highlights the prevailing trend direction.",
+    key: str = "sma"
+    display_name: str = "Simple Moving Average"
+    category: str = "trend"
+    formula: str = "Average of the last N closing prices."
+    interpretation: str = (
+        "Smooths price noise and highlights the prevailing trend direction."
     )
 
     def calculate(
@@ -42,29 +41,28 @@ class SMAIndicator:
         bars: PriceSeries,
         *,
         parameters: SMAParams | dict[str, object] | None = None,
-    ) -> IndicatorSeries:
+    ) -> SMA:
         resolved_parameters = _coerce_params(parameters)
         window = resolved_parameters.window
-        closes = bars.closes
-        timestamps = bars.timestamps
-        points: list[IndicatorPoint] = []
-        for index, timestamp in enumerate(timestamps):
-            if index + 1 < window:
-                points.append(IndicatorPoint(timestamp=timestamp, value=None))
-                continue
-            window_values = closes[index - window + 1 : index + 1]
-            points.append(
-                IndicatorPoint(
-                    timestamp=timestamp,
-                    value=sum(window_values) / window,
-                )
-            )
-
-        return IndicatorSeries(
-            spec=self.spec,
-            parameters=resolved_parameters,
-            points=tuple(points),
+        values = bars.closes.rolling(window=window).mean()
+        frame = pd.DataFrame(
+            {
+                PRICE_BAR_TIMESTAMP: bars.timestamps,
+                "value": values.astype(object).where(values.notna(), None),
+            }
         )
+        return SMA(
+            spec=self,
+            parameters=resolved_parameters,
+            data=frame,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SMA(Indicator):
+    @property
+    def sma(self) -> pd.Series:
+        return self.data["value"]
 
 
 def _coerce_params(parameters: SMAParams | dict[str, object] | None) -> SMAParams:

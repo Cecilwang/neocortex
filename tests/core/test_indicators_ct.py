@@ -3,7 +3,13 @@ from datetime import datetime
 
 import pytest
 
-from neocortex.models import Exchange, Market, PriceBar, PriceSeries, SecurityId
+from neocortex.models import (
+    Exchange,
+    Market,
+    PriceBar,
+    PriceSeries,
+    SecurityId,
+)
 
 
 def _build_bar(
@@ -38,23 +44,32 @@ def sample_bars() -> PriceSeries:
 def test_indicator_registry_exposes_minimal_metadata() -> None:
     from neocortex.indicators import list_indicator_specs
     from neocortex.indicators.ema import EMAParams
+    from neocortex.indicators.macd import MACDParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
 
-    specs = {spec.key: spec for spec in list_indicator_specs()}
+    indicators = {indicator.key: indicator for indicator in list_indicator_specs()}
 
-    assert tuple(specs) == ("sma", "ema", "rsi")
-    assert specs["sma"].display_name == "Simple Moving Average"
+    assert tuple(indicators) == ("sma", "ema", "rsi", "macd")
+    assert indicators["sma"].display_name == "Simple Moving Average"
     assert asdict(SMAParams()) == {"window": 20}
-    assert "average" in specs["sma"].formula.lower()
+    assert "average" in indicators["sma"].formula.lower()
     assert asdict(EMAParams()) == {"window": 20}
-    assert "recent prices" in specs["ema"].interpretation.lower()
+    assert "recent prices" in indicators["ema"].interpretation.lower()
     assert asdict(RSIParams()) == {"period": 14}
-    assert "momentum" in specs["rsi"].interpretation.lower()
+    assert "momentum" in indicators["rsi"].interpretation.lower()
+    assert asdict(MACDParams()) == {
+        "fast_window": 12,
+        "slow_window": 26,
+        "signal_window": 9,
+        "normalization": None,
+    }
+    assert "signal line" in indicators["macd"].formula.lower()
 
 
 def test_indicator_params_can_be_built_from_dict() -> None:
     from neocortex.indicators.ema import EMAParams
+    from neocortex.indicators.macd import MACDParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
 
@@ -62,6 +77,19 @@ def test_indicator_params_can_be_built_from_dict() -> None:
     assert SMAParams.from_dict({"window": 3}) == SMAParams(window=3)
     assert EMAParams.from_dict({"window": 5}) == EMAParams(window=5)
     assert RSIParams.from_dict({"period": 7}) == RSIParams(period=7)
+    assert MACDParams.from_dict(
+        {
+            "fast_window": 3,
+            "slow_window": 4,
+            "signal_window": 2,
+            "normalization": "close",
+        }
+    ) == MACDParams(
+        fast_window=3,
+        slow_window=4,
+        signal_window=2,
+        normalization="close",
+    )
 
 
 def test_calculate_indicator_returns_aligned_sma_series(
@@ -69,18 +97,18 @@ def test_calculate_indicator_returns_aligned_sma_series(
 ) -> None:
     from neocortex.indicators.sma import SMAParams, sma
 
-    series = sma.calculate(sample_bars, parameters=SMAParams(window=3))
+    result = sma.calculate(sample_bars, parameters=SMAParams(window=3))
 
-    assert series.spec.key == "sma"
-    assert series.parameters == SMAParams(window=3)
-    assert [point.timestamp.isoformat() for point in series.points] == [
+    assert result.spec.key == "sma"
+    assert result.parameters == SMAParams(window=3)
+    assert [timestamp.isoformat() for timestamp in result.timestamp] == [
         "2026-03-10T15:00:00",
         "2026-03-11T15:00:00",
         "2026-03-12T15:00:00",
         "2026-03-13T15:00:00",
         "2026-03-14T15:00:00",
     ]
-    assert [point.value for point in series.points] == [
+    assert result.sma.tolist() == [
         None,
         None,
         101.0,
@@ -94,9 +122,9 @@ def test_calculate_indicator_returns_ema_series(
 ) -> None:
     from neocortex.indicators.ema import EMAParams, ema
 
-    series = ema.calculate(sample_bars, parameters=EMAParams(window=3))
+    result = ema.calculate(sample_bars, parameters=EMAParams(window=3))
 
-    assert [point.value for point in series.points] == [
+    assert result.ema.tolist() == [
         None,
         None,
         101.0,
@@ -110,9 +138,9 @@ def test_calculate_indicator_returns_rsi_series(
 ) -> None:
     from neocortex.indicators import calculate_indicator
 
-    series = calculate_indicator("rsi", sample_bars, parameters={"period": 3})
+    result = calculate_indicator("rsi", sample_bars, parameters={"period": 3})
 
-    assert [point.value for point in series.points] == [
+    assert result.rsi.tolist() == [
         None,
         None,
         None,
@@ -121,11 +149,85 @@ def test_calculate_indicator_returns_rsi_series(
     ]
 
 
+def test_calculate_macd_indicator_returns_aligned_series(
+    sample_bars: PriceSeries,
+) -> None:
+    from neocortex.indicators import calculate_indicator
+    from neocortex.indicators.macd import MACDParams
+
+    result = calculate_indicator(
+        "macd",
+        sample_bars,
+        parameters=MACDParams(fast_window=3, slow_window=4, signal_window=2),
+    )
+
+    assert result.macd.tolist() == [
+        None,
+        None,
+        None,
+        1.0,
+        1.0,
+    ]
+    assert result.signal.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        1.0,
+    ]
+    assert result.hist.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        0.0,
+    ]
+
+
+def test_calculate_macd_indicator_supports_close_normalization(
+    sample_bars: PriceSeries,
+) -> None:
+    from neocortex.indicators import calculate_indicator
+
+    result = calculate_indicator(
+        "macd",
+        sample_bars,
+        parameters={
+            "fast_window": 3,
+            "slow_window": 4,
+            "signal_window": 2,
+            "normalization": "close",
+        },
+    )
+
+    assert result.macd.tolist() == [
+        None,
+        None,
+        None,
+        0.009523809523809525,
+        0.009345794392523364,
+    ]
+    assert result.signal.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        0.009434801958166445,
+    ]
+    assert result.hist.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        -8.900756564308131e-05,
+    ]
+
+
 def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
     from neocortex.indicators.sma import SMAParams, sma
     from neocortex.models import PriceSeries
 
-    series = sma.calculate(
+    result = sma.calculate(
         PriceSeries(
             security_id=SecurityId(
                 symbol="600519",
@@ -137,8 +239,8 @@ def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
         parameters=SMAParams(window=3),
     )
 
-    assert series.points == ()
-    assert series.parameters == SMAParams(window=3)
+    assert result.data.empty
+    assert result.parameters == SMAParams(window=3)
 
 
 @pytest.mark.parametrize(
@@ -148,6 +250,16 @@ def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
         ("sma", {"window": 0}),
         ("ema", {"window": -1}),
         ("rsi", {"period": 0}),
+        ("macd", {"fast_window": 5, "slow_window": 5, "signal_window": 2}),
+        (
+            "macd",
+            {
+                "fast_window": 3,
+                "slow_window": 5,
+                "signal_window": 2,
+                "normalization": "weird",
+            },
+        ),
     ],
 )
 def test_calculate_indicator_rejects_unknown_or_invalid_requests(
@@ -170,6 +282,7 @@ def test_calculate_indicator_rejects_unknown_or_invalid_requests(
 
 def test_price_series_preserves_sequence_invariants() -> None:
     from neocortex.models import PriceSeries
+    from neocortex.models import PRICE_BAR_CLOSE
 
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     first_bar = _build_bar(security_id, day=10, close=100.0)
@@ -177,11 +290,14 @@ def test_price_series_preserves_sequence_invariants() -> None:
     series = PriceSeries(security_id=security_id, bars=(first_bar, second_bar))
 
     assert len(series) == 2
-    assert series[0] == first_bar
     assert series.start_timestamp == first_bar.timestamp
     assert series.end_timestamp == second_bar.timestamp
-    assert series.timestamps == (first_bar.timestamp, second_bar.timestamp)
-    assert series.closes == (100.0, 101.0)
+    assert series.timestamps.tolist() == [
+        first_bar.timestamp,
+        second_bar.timestamp,
+    ]
+    assert series.closes.tolist() == [100.0, 101.0]
+    assert series.bars[PRICE_BAR_CLOSE].tolist() == [100.0, 101.0]
 
 
 def test_price_series_rejects_mismatched_security_or_unsorted_bars() -> None:

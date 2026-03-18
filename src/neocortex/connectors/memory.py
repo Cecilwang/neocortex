@@ -9,6 +9,7 @@ from neocortex.connectors.base import DAILY_BAR_INTERVAL
 from neocortex.models.core import (
     CompanyProfile,
     PriceSeries,
+    PRICE_BAR_TIMESTAMP,
     SecurityId,
 )
 
@@ -46,12 +47,9 @@ class InMemoryConnector:
             )
 
         series = self.price_bars[security_id]
+        mask = series.bars[PRICE_BAR_TIMESTAMP].dt.date.between(start_date, end_date)
 
         return PriceSeries(
             security_id=security_id,
-            bars=tuple(
-                bar
-                for bar in series
-                if start_date <= bar.timestamp.date() <= end_date
-            ),
+            data=series.bars.loc[mask],
         )

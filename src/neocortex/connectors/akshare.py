@@ -6,20 +6,24 @@ import importlib
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from typing import TYPE_CHECKING, Any
+from typing import Any
+import pandas as pd
 
 from neocortex.connectors.base import DAILY_BAR_INTERVAL
 from neocortex.models.core import (
     CompanyProfile,
     Exchange,
     Market,
-    PriceBar,
     PriceSeries,
+    PRICE_BAR_ADJUSTED_CLOSE,
+    PRICE_BAR_CLOSE,
+    PRICE_BAR_HIGH,
+    PRICE_BAR_LOW,
+    PRICE_BAR_OPEN,
+    PRICE_BAR_TIMESTAMP,
+    PRICE_BAR_VOLUME,
     SecurityId,
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 logger = logging.getLogger(__name__)
@@ -164,7 +168,10 @@ class AkShareConnector:
             or profile_items[_XUEQIU_LEGAL_NAME_FIELD]
         )
         industry_value = profile_items[_XUEQIU_INDUSTRY_FIELD]
-        if isinstance(industry_value, dict) and industry_value.get("ind_name") is not None:
+        if (
+            isinstance(industry_value, dict)
+            and industry_value.get("ind_name") is not None
+        ):
             industry = str(industry_value["ind_name"])
         else:
             industry = str(industry_value)
@@ -193,9 +200,9 @@ class AkShareConnector:
         adjust: str,
     ) -> PriceSeries:
         if frame.empty:
-            return PriceSeries(security_id=security_id, bars=())
+            return PriceSeries(security_id=security_id)
 
-        bars: list[PriceBar] = []
+        records: list[dict[str, float | datetime | None]] = []
         for _, row in frame.iterrows():
             trading_date = row[_BAR_DATE_FIELD]
             if isinstance(trading_date, datetime):
@@ -204,16 +211,19 @@ class AkShareConnector:
                 bar_timestamp = datetime.combine(trading_date, time(15, 0))
 
             close = float(row[_BAR_CLOSE_FIELD])
-            bars.append(
-                PriceBar(
-                    security_id=security_id,
-                    timestamp=bar_timestamp,
-                    open=float(row[_BAR_OPEN_FIELD]),
-                    high=float(row[_BAR_HIGH_FIELD]),
-                    low=float(row[_BAR_LOW_FIELD]),
-                    close=close,
-                    volume=float(row[_BAR_VOLUME_FIELD]) * _AKSHARE_VOLUME_LOT_SIZE,
-                    adjusted_close=close if adjust else None,
-                )
+            records.append(
+                {
+                    PRICE_BAR_TIMESTAMP: bar_timestamp,
+                    PRICE_BAR_OPEN: float(row[_BAR_OPEN_FIELD]),
+                    PRICE_BAR_HIGH: float(row[_BAR_HIGH_FIELD]),
+                    PRICE_BAR_LOW: float(row[_BAR_LOW_FIELD]),
+                    PRICE_BAR_CLOSE: close,
+                    PRICE_BAR_VOLUME: float(row[_BAR_VOLUME_FIELD])
+                    * _AKSHARE_VOLUME_LOT_SIZE,
+                    PRICE_BAR_ADJUSTED_CLOSE: close if adjust else None,
+                }
             )
-        return PriceSeries(security_id=security_id, bars=tuple(bars))
+        return PriceSeries(
+            security_id=security_id,
+            data=pd.DataFrame.from_records(records),
+        )

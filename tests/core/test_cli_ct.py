@@ -7,6 +7,13 @@ from neocortex.models import (
     Market,
     PriceBar,
     PriceSeries,
+    PRICE_BAR_ADJUSTED_CLOSE,
+    PRICE_BAR_CLOSE,
+    PRICE_BAR_HIGH,
+    PRICE_BAR_LOW,
+    PRICE_BAR_OPEN,
+    PRICE_BAR_TIMESTAMP,
+    PRICE_BAR_VOLUME,
     SecurityId,
 )
 
@@ -147,16 +154,17 @@ def test_cli_bars_command_prints_normalized_price_bars(
     )
     lines = capsys.readouterr().out.strip().splitlines()
     assert lines[0].split() == [
-        "timestamp",
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "adjusted_close",
+        PRICE_BAR_TIMESTAMP,
+        PRICE_BAR_OPEN,
+        PRICE_BAR_HIGH,
+        PRICE_BAR_LOW,
+        PRICE_BAR_CLOSE,
+        PRICE_BAR_VOLUME,
+        PRICE_BAR_ADJUSTED_CLOSE,
     ]
     assert lines[1].split() == [
-        "2026-03-14T15:00:00",
+        "2026-03-14",
+        "15:00:00",
         "1500.0",
         "1520.0",
         "1498.0",
@@ -165,7 +173,8 @@ def test_cli_bars_command_prints_normalized_price_bars(
         "NaN",
     ]
     assert lines[2].split() == [
-        "2026-03-15T15:00:00",
+        "2026-03-15",
+        "15:00:00",
         "1510.0",
         "1533.0",
         "1505.0",
