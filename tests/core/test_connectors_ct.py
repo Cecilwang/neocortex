@@ -10,7 +10,6 @@ from neocortex.models import (
     Market,
     PriceBar,
     PriceSeries,
-    PRICE_BAR_CLOSE,
     SecurityId,
 )
 
