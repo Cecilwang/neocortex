@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol, TypeVar
+from typing import TypeVar
 
-from neocortex.models.core import PriceSeries
+import pandas as pd
+
+from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
 
 ParamsT = TypeVar("ParamsT", bound="IndicatorParams")
@@ -14,22 +15,23 @@ ParamsT = TypeVar("ParamsT", bound="IndicatorParams")
 
 @dataclass(frozen=True, slots=True)
 class IndicatorSpec:
-    """Metadata that describes one supported indicator."""
+    """Metadata and calculation behavior for one supported indicator."""
 
     key: str
     display_name: str
     category: str
-    input_field: str
     formula: str = ""
     interpretation: str = ""
 
+    def calculate(
+        self,
+        bars: PriceSeries,
+        *,
+        parameters: object | None = None,
+    ) -> Indicator:
+        """Calculate one aligned indicator result over normalized price bars."""
 
-@dataclass(frozen=True, slots=True)
-class IndicatorPoint:
-    """One indicator value aligned to a market-data timestamp."""
-
-    timestamp: datetime
-    value: float | None
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,25 +49,13 @@ class IndicatorParams:
 
 
 @dataclass(frozen=True, slots=True)
-class IndicatorSeries:
-    """Calculated indicator values and the spec used to produce them."""
+class Indicator:
+    """One indicator calculation result with metadata and tabular output."""
 
     spec: IndicatorSpec
     parameters: IndicatorParams
-    points: tuple[IndicatorPoint, ...] = ()
-
-
-class Indicator(Protocol):
-    """Behavior contract implemented by concrete indicator modules."""
+    data: pd.DataFrame
 
     @property
-    def spec(self) -> IndicatorSpec:
-        """Return the static metadata for this indicator."""
-
-    def calculate(
-        self,
-        bars: PriceSeries,
-        *,
-        parameters: object | None = None,
-    ) -> IndicatorSeries:
-        """Calculate an aligned series over normalized price bars."""
+    def timestamp(self) -> pd.Series:
+        return self.data[PRICE_BAR_TIMESTAMP]

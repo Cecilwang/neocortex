@@ -11,6 +11,7 @@ from neocortex.models.core import (
     FundamentalSnapshot,
     Market,
     MarketContext,
+    PRICE_BAR_TIMESTAMP,
     PriceBar,
     PriceSeries,
     SecurityId,
@@ -105,11 +106,11 @@ def test_core_models_store_normalized_entities(security_id: SecurityId) -> None:
     assert profile.security_id.ticker == "US:AAPL"
     assert market_context.trading_calendar is TradingCalendar.XNYS
     assert bar.close == 211.4
-    assert series.closes == (211.4,)
+    assert series.closes.tolist() == [211.4]
     assert benchmark.metric_averages["roe"] == 0.18
 
 
-def test_price_series_to_df_uses_price_bar_columns(security_id: SecurityId) -> None:
+def test_price_series_bars_uses_price_bar_columns(security_id: SecurityId) -> None:
     series = PriceSeries(
         security_id=security_id,
         bars=(
@@ -125,7 +126,10 @@ def test_price_series_to_df_uses_price_bar_columns(security_id: SecurityId) -> N
         ),
     )
 
-    frame = series.to_df()
+    frame = series.bars.copy()
+    frame[PRICE_BAR_TIMESTAMP] = frame[PRICE_BAR_TIMESTAMP].map(
+        lambda value: value.isoformat()
+    )
 
     assert frame.to_dict(orient="records") == [
         {

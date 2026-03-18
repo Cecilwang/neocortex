@@ -6,6 +6,8 @@ import argparse
 from datetime import date
 from typing import Any, Sequence
 
+import pandas as pd
+
 from neocortex.connectors import AkShareConnector
 from neocortex.models import Exchange, Market, SecurityId
 from neocortex.serialization import to_pretty_json
@@ -13,6 +15,7 @@ from neocortex.serialization import to_pretty_json
 
 def _parse_date(value: str) -> date:
     return date.fromisoformat(value)
+
 
 def _build_cn_security_id(args: argparse.Namespace) -> SecurityId:
     return SecurityId(
@@ -26,7 +29,7 @@ def _emit_json(payload: Any) -> None:
     print(to_pretty_json(payload))
 
 
-def _emit_dataframe(payload: Any) -> None:
+def _emit_dataframe(payload: pd.DataFrame) -> None:
     print(payload.to_string(index=False))
 
 
@@ -45,7 +48,7 @@ def _run_akshare_bars(args: argparse.Namespace) -> int:
         end_date=args.end_date,
         adjust=args.adjust,
     )
-    _emit_dataframe(bars.to_df())
+    _emit_dataframe(bars.bars)
     return 0
 
 

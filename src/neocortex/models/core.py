@@ -5,23 +5,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
-from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from typing import Any
 
-if TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 
 JsonDict = dict[str, Any]
 
-_PRICE_SERIES_DF_COLUMNS = (
-    "timestamp",
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "adjusted_close",
+PRICE_BAR_TIMESTAMP = "timestamp"
+PRICE_BAR_OPEN = "open"
+PRICE_BAR_HIGH = "high"
+PRICE_BAR_LOW = "low"
+PRICE_BAR_CLOSE = "close"
+PRICE_BAR_VOLUME = "volume"
+PRICE_BAR_ADJUSTED_CLOSE = "adjusted_close"
+
+PRICE_BAR_VALUE_COLUMNS = (
+    PRICE_BAR_TIMESTAMP,
+    PRICE_BAR_OPEN,
+    PRICE_BAR_HIGH,
+    PRICE_BAR_LOW,
+    PRICE_BAR_CLOSE,
+    PRICE_BAR_VOLUME,
+    PRICE_BAR_ADJUSTED_CLOSE,
 )
 
 
@@ -120,75 +127,114 @@ class PriceBar:
     adjusted_close: float | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class PriceSeries(Sequence[PriceBar]):
-    """Time-ordered price-bar sequence for one security."""
+@dataclass(frozen=True, slots=True, init=False)
+class PriceSeries:
+    """Time-ordered OHLCV frame for one security."""
 
     security_id: SecurityId
-    bars: tuple[PriceBar, ...] = ()
+    data: pd.DataFrame
 
-    def __post_init__(self) -> None:
-        previous_timestamp: datetime | None = None
-        seen_timestamps: set[datetime] = set()
-        for bar in self.bars:
-            if bar.security_id != self.security_id:
-                raise ValueError("PriceSeries bars must all share the same security_id.")
-            if previous_timestamp is not None and bar.timestamp < previous_timestamp:
-                raise ValueError("PriceSeries bars must be sorted by timestamp.")
-            if bar.timestamp in seen_timestamps:
-                raise ValueError("PriceSeries bars must not contain duplicate timestamps.")
-            seen_timestamps.add(bar.timestamp)
-            previous_timestamp = bar.timestamp
+    def __init__(
+        self,
+        *,
+        security_id: SecurityId,
+        bars: Sequence[PriceBar] = (),
+        data: pd.DataFrame | None = None,
+    ) -> None:
+        if data is not None and bars:
+            raise ValueError("PriceSeries accepts either bars or data, but not both.")
+        if data is None:
+            normalized_data = _price_series_frame_from_bars(security_id, bars)
+        else:
+            normalized_data = _normalize_price_series_frame(data)
+        _validate_price_series_frame(security_id, normalized_data)
+        object.__setattr__(self, "security_id", security_id)
+        object.__setattr__(self, "data", normalized_data)
+
+    @property
+    def bars(self) -> pd.DataFrame:
+        return self.data
 
     def __len__(self) -> int:
-        return len(self.bars)
-
-    def __getitem__(self, index: int) -> PriceBar:
-        return self.bars[index]
-
-    def __iter__(self) -> Iterator[PriceBar]:
-        return iter(self.bars)
+        return len(self.data)
 
     @property
-    def start_timestamp(self) -> datetime | None:
-        if not self.bars:
+    def start_timestamp(self) -> object | None:
+        if self.data.empty:
             return None
-        return self.bars[0].timestamp
+        return self.data[PRICE_BAR_TIMESTAMP].iloc[0]
 
     @property
-    def end_timestamp(self) -> datetime | None:
-        if not self.bars:
+    def end_timestamp(self) -> object | None:
+        if self.data.empty:
             return None
-        return self.bars[-1].timestamp
+        return self.data[PRICE_BAR_TIMESTAMP].iloc[-1]
 
     @property
-    def closes(self) -> tuple[float, ...]:
-        return tuple(bar.close for bar in self.bars)
+    def closes(self) -> pd.Series:
+        return self.data.loc[:, PRICE_BAR_CLOSE]
 
     @property
-    def timestamps(self) -> tuple[datetime, ...]:
-        return tuple(bar.timestamp for bar in self.bars)
+    def timestamps(self) -> pd.Series:
+        return self.data.loc[:, PRICE_BAR_TIMESTAMP]
 
-    def to_df(self) -> pd.DataFrame:
-        import pandas as pd
 
-        if not self.bars:
-            return pd.DataFrame(columns=_PRICE_SERIES_DF_COLUMNS)
-        return pd.DataFrame.from_records(
-            (
-                {
-                    "timestamp": bar.timestamp.isoformat(),
-                    "open": bar.open,
-                    "high": bar.high,
-                    "low": bar.low,
-                    "close": bar.close,
-                    "volume": bar.volume,
-                    "adjusted_close": bar.adjusted_close,
-                }
-                for bar in self.bars
-            ),
-            columns=_PRICE_SERIES_DF_COLUMNS,
+def _empty_price_series_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=PRICE_BAR_VALUE_COLUMNS)
+
+
+def _price_series_frame_from_bars(
+    security_id: SecurityId,
+    bars: Sequence[PriceBar],
+) -> pd.DataFrame:
+    if not bars:
+        return _empty_price_series_frame()
+    records: list[dict[str, object]] = []
+    for bar in bars:
+        if bar.security_id != security_id:
+            raise ValueError("PriceSeries bars must all share the same security_id.")
+        records.append(
+            {
+                PRICE_BAR_TIMESTAMP: bar.timestamp,
+                PRICE_BAR_OPEN: bar.open,
+                PRICE_BAR_HIGH: bar.high,
+                PRICE_BAR_LOW: bar.low,
+                PRICE_BAR_CLOSE: bar.close,
+                PRICE_BAR_VOLUME: bar.volume,
+                PRICE_BAR_ADJUSTED_CLOSE: bar.adjusted_close,
+            }
         )
+    return pd.DataFrame(records, columns=PRICE_BAR_VALUE_COLUMNS)
+
+
+def _normalize_price_series_frame(data: pd.DataFrame) -> pd.DataFrame:
+    frame = data.copy()
+    if PRICE_BAR_TIMESTAMP not in frame.columns:
+        raise ValueError(
+            f"PriceSeries data is missing required columns: {PRICE_BAR_TIMESTAMP}."
+        )
+    frame[PRICE_BAR_TIMESTAMP] = pd.to_datetime(frame[PRICE_BAR_TIMESTAMP])
+    missing_columns = [
+        column for column in PRICE_BAR_VALUE_COLUMNS if column not in frame.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            f"PriceSeries data is missing required columns: {', '.join(missing_columns)}."
+        )
+    frame = frame.loc[:, PRICE_BAR_VALUE_COLUMNS]
+    return frame
+
+
+def _validate_price_series_frame(
+    security_id: SecurityId,
+    frame: pd.DataFrame,
+) -> None:
+    _ = security_id
+    timestamps = frame[PRICE_BAR_TIMESTAMP]
+    if not timestamps.is_monotonic_increasing:
+        raise ValueError("PriceSeries bars must be sorted by timestamp.")
+    if timestamps.duplicated().any():
+        raise ValueError("PriceSeries bars must not contain duplicate timestamps.")
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,15 @@ import pytest
 
 from neocortex.connectors import AkShareConnector
 from neocortex.markets import get_market_context
-from neocortex.models import Exchange, Market, SecurityId
+from neocortex.models import (
+    Exchange,
+    Market,
+    PRICE_BAR_ADJUSTED_CLOSE,
+    PRICE_BAR_CLOSE,
+    PRICE_BAR_TIMESTAMP,
+    PRICE_BAR_VOLUME,
+    SecurityId,
+)
 
 
 class FakeAkShareAPI:
@@ -179,6 +187,7 @@ def test_akshare_connector_falls_back_to_xueqiu_company_profile(
     assert profile.sector == "白酒"
     assert profile.currency == "CNY"
 
+
 class UniverseAkShareAPI(FakeAkShareAPI):
     def stock_info_a_code_name(self) -> pd.DataFrame:
         return pd.DataFrame(
@@ -187,6 +196,7 @@ class UniverseAkShareAPI(FakeAkShareAPI):
                 "name": ["贵州茅台", "平安银行"],
             }
         )
+
 
 def test_akshare_connector_fetches_cn_security_universe() -> None:
     connector = AkShareConnector(api=UniverseAkShareAPI())
@@ -197,7 +207,6 @@ def test_akshare_connector_fetches_cn_security_universe() -> None:
         {"code": "600519", "name": "贵州茅台"},
         {"code": "000001", "name": "平安银行"},
     ]
-
 
 
 def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
@@ -219,14 +228,17 @@ def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
     assert profile.currency == "CNY"
     assert bars.security_id == security_id
     assert len(bars) == 2
-    assert bars[0].timestamp == datetime(2026, 3, 14, 15, 0)
-    assert bars[1].close == 1528.0
-    assert bars[0].volume == 12_000_000.0
-    assert bars[1].adjusted_close == 1528.0
-    assert bars[1].volume == 11_000_000.0
+    assert [
+        timestamp.to_pydatetime() for timestamp in bars.bars[PRICE_BAR_TIMESTAMP]
+    ] == [
+        datetime(2026, 3, 14, 15, 0),
+        datetime(2026, 3, 15, 15, 0),
+    ]
+    assert bars.bars[PRICE_BAR_CLOSE].tolist() == [1515.0, 1528.0]
+    assert bars.bars[PRICE_BAR_VOLUME].tolist() == [12_000_000.0, 11_000_000.0]
+    assert bars.bars[PRICE_BAR_ADJUSTED_CLOSE].tolist() == [1515.0, 1528.0]
     assert market_context.timezone == "Asia/Shanghai"
     assert market_context.benchmark_symbol == "000300.SH"
-
 
 
 def test_akshare_connector_rejects_non_cn_security() -> None:
@@ -270,7 +282,7 @@ def test_akshare_connector_uses_unadjusted_series_when_adjust_is_none() -> None:
     )
 
     assert api.last_adjust == ""
-    assert bars[1].adjusted_close is None
+    assert bars.bars[PRICE_BAR_ADJUSTED_CLOSE].tolist() == [None, None]
 
 
 def test_akshare_connector_returns_empty_tuple_when_provider_has_no_bars() -> None:
@@ -283,7 +295,7 @@ def test_akshare_connector_returns_empty_tuple_when_provider_has_no_bars() -> No
         end_date=date(2026, 3, 15),
     )
 
-    assert bars.bars == ()
+    assert bars.bars.empty
 
 
 @pytest.mark.parametrize("missing_field", ["股票简称", "行业"])

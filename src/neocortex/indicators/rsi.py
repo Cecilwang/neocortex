@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from neocortex.indicators.core import (
+    Indicator,
     IndicatorParams,
-    IndicatorPoint,
-    IndicatorSeries,
     IndicatorSpec,
 )
-from neocortex.models.core import PriceSeries
+from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
+import pandas as pd
 
 
 def _rsi_value(average_gain: float, average_loss: float) -> float:
@@ -32,16 +32,17 @@ class RSIParams(IndicatorParams):
 
 
 @dataclass(frozen=True, slots=True)
-class RSIIndicator:
+class RSIIndicator(IndicatorSpec):
     """Calculate Wilder-style RSI over close prices."""
 
-    spec: IndicatorSpec = IndicatorSpec(
-        key="rsi",
-        display_name="Relative Strength Index",
-        category="momentum",
-        input_field="close",
-        formula="Wilder-style ratio of average gains to average losses over N periods.",
-        interpretation="Momentum oscillator often used to spot overbought and oversold regimes.",
+    key: str = "rsi"
+    display_name: str = "Relative Strength Index"
+    category: str = "momentum"
+    formula: str = (
+        "Wilder-style ratio of average gains to average losses over N periods."
+    )
+    interpretation: str = (
+        "Momentum oscillator often used to spot overbought and oversold regimes."
     )
 
     def calculate(
@@ -49,55 +50,66 @@ class RSIIndicator:
         bars: PriceSeries,
         *,
         parameters: RSIParams | dict[str, object] | None = None,
-    ) -> IndicatorSeries:
+    ) -> RSI:
         resolved_parameters = _coerce_params(parameters)
         period = resolved_parameters.period
         closes = bars.closes
-        timestamps = bars.timestamps
-        if not closes:
-            return IndicatorSeries(
-                spec=self.spec,
-                parameters=resolved_parameters,
-                points=(),
+        if closes.empty:
+            frame = pd.DataFrame(
+                {
+                    PRICE_BAR_TIMESTAMP: pd.Series(dtype="datetime64[ns]"),
+                    "value": pd.Series(dtype=object),
+                }
             )
+            return RSI(spec=self, parameters=resolved_parameters, data=frame)
 
-        points = [
-            IndicatorPoint(timestamp=timestamp, value=None)
-            for timestamp in timestamps
-        ]
+        values: list[float | None] = [None] * len(closes)
         if len(closes) <= period:
-            return IndicatorSeries(
-                spec=self.spec,
+            frame = pd.DataFrame(
+                {
+                    PRICE_BAR_TIMESTAMP: bars.timestamps,
+                    "value": pd.Series(values, dtype=object),
+                }
+            )
+            return RSI(
+                spec=self,
                 parameters=resolved_parameters,
-                points=tuple(points),
+                data=frame,
             )
 
-        changes = [current - previous for previous, current in zip(closes, closes[1:])]
+        changes = closes.diff().iloc[1:]
         gains = [max(change, 0.0) for change in changes]
         losses = [abs(min(change, 0.0)) for change in changes]
 
         average_gain = sum(gains[:period]) / period
         average_loss = sum(losses[:period]) / period
-        points[period] = IndicatorPoint(
-            timestamp=timestamps[period],
-            value=_rsi_value(average_gain, average_loss),
-        )
+        values[period] = _rsi_value(average_gain, average_loss)
 
         for index in range(period + 1, len(bars)):
             gain = gains[index - 1]
             loss = losses[index - 1]
             average_gain = ((average_gain * (period - 1)) + gain) / period
             average_loss = ((average_loss * (period - 1)) + loss) / period
-            points[index] = IndicatorPoint(
-                timestamp=timestamps[index],
-                value=_rsi_value(average_gain, average_loss),
-            )
+            values[index] = _rsi_value(average_gain, average_loss)
 
-        return IndicatorSeries(
-            spec=self.spec,
-            parameters=resolved_parameters,
-            points=tuple(points),
+        frame = pd.DataFrame(
+            {
+                PRICE_BAR_TIMESTAMP: bars.timestamps,
+                "value": pd.Series(values, dtype=object),
+            }
         )
+        return RSI(
+            spec=self,
+            parameters=resolved_parameters,
+            data=frame,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RSI(Indicator):
+    @property
+    def rsi(self) -> pd.Series:
+        return self.data["value"]
 
 
 def _coerce_params(parameters: RSIParams | dict[str, object] | None) -> RSIParams:

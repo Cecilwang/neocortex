@@ -2,13 +2,23 @@ from datetime import date
 from types import SimpleNamespace
 
 from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
-from neocortex.models import AgentRequest, AgentResponse, AgentRole, AgentExecutionTrace, Exchange, Market, SecurityId
+from neocortex.models import (
+    AgentRequest,
+    AgentResponse,
+    AgentRole,
+    AgentExecutionTrace,
+    Exchange,
+    Market,
+    SecurityId,
+)
 from neocortex.pipeline import Pipeline
 
 
 class RecordingTransport:
     def complete(self, *, agent, system_prompt, user_prompt, inference_config):
-        raise AssertionError("Transport should not be called in this pipeline wiring test.")
+        raise AssertionError(
+            "Transport should not be called in this pipeline wiring test."
+        )
 
 
 class RecordingAgent:
@@ -46,7 +56,8 @@ class RecordingAgent:
         if trace_by_role is not None:
             if self.role is AgentRole.SECTOR:
                 build_kwargs["analyst_reports"] = tuple(
-                    trace_by_role[dependency].response for dependency in self.dependencies
+                    trace_by_role[dependency].response
+                    for dependency in self.dependencies
                 )
             if self.role is AgentRole.PM:
                 build_kwargs["macro_report"] = trace_by_role[AgentRole.MACRO].response
@@ -140,10 +151,7 @@ def test_pipeline_injects_upstream_reports_into_sector_and_pm(monkeypatch) -> No
             dependencies=dependency_map[role],
         )
 
-    agent_classes = {
-        role: _recording_agent_class(role)
-        for role in AgentRole
-    }
+    agent_classes = {role: _recording_agent_class(role) for role in AgentRole}
 
     monkeypatch.setattr(
         "neocortex.pipeline.pipeline.Pipeline._load_pipeline_document",

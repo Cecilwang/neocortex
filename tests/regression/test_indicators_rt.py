@@ -37,14 +37,27 @@ def test_indicator_output_baseline() -> None:
         ),
     )
 
+    sma_result = calculate_indicator("sma", bars, parameters={"window": 3})
+    ema_result = calculate_indicator("ema", bars, parameters={"window": 3})
+    rsi_result = calculate_indicator("rsi", bars, parameters={"period": 3})
+    macd_result = calculate_indicator(
+        "macd",
+        bars,
+        parameters={"fast_window": 3, "slow_window": 4, "signal_window": 2},
+    )
+
     assert {
-        "sma_3": [point.value for point in calculate_indicator("sma", bars, parameters={"window": 3}).points],
-        "ema_3": [point.value for point in calculate_indicator("ema", bars, parameters={"window": 3}).points],
-        "rsi_3": [point.value for point in calculate_indicator("rsi", bars, parameters={"period": 3}).points],
+        "sma_3": sma_result.sma.tolist(),
+        "ema_3": ema_result.ema.tolist(),
+        "rsi_3": rsi_result.rsi.tolist(),
+        "macd_3_4_2": macd_result.macd.tolist(),
+        "signal_3_4_2": macd_result.signal.tolist(),
+        "hist_3_4_2": macd_result.hist.tolist(),
         "params": {
-            "sma": asdict(calculate_indicator("sma", bars, parameters={"window": 3}).parameters),
-            "ema": asdict(calculate_indicator("ema", bars, parameters={"window": 3}).parameters),
-            "rsi": asdict(calculate_indicator("rsi", bars, parameters={"period": 3}).parameters),
+            "sma": asdict(sma_result.parameters),
+            "ema": asdict(ema_result.parameters),
+            "rsi": asdict(rsi_result.parameters),
+            "macd": asdict(macd_result.parameters),
         },
     } == {
         "sma_3": [
@@ -71,9 +84,39 @@ def test_indicator_output_baseline() -> None:
             88.88888888888889,
             71.11111111111111,
         ],
+        "macd_3_4_2": [
+            None,
+            None,
+            None,
+            0.75,
+            0.8000000000000114,
+            0.5550000000000068,
+        ],
+        "signal_3_4_2": [
+            None,
+            None,
+            None,
+            None,
+            0.7750000000000057,
+            0.6283333333333398,
+        ],
+        "hist_3_4_2": [
+            None,
+            None,
+            None,
+            None,
+            0.025000000000005684,
+            -0.07333333333333303,
+        ],
         "params": {
             "sma": {"window": 3},
             "ema": {"window": 3},
             "rsi": {"period": 3},
+            "macd": {
+                "fast_window": 3,
+                "slow_window": 4,
+                "signal_window": 2,
+                "normalization": None,
+            },
         },
     }

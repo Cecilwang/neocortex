@@ -10,6 +10,7 @@ from neocortex.models import (
     Market,
     PriceBar,
     PriceSeries,
+    PRICE_BAR_CLOSE,
     SecurityId,
 )
 
@@ -71,7 +72,7 @@ def test_in_memory_connector_filters_price_bars_by_date(
     )
 
     assert len(bars) == 1
-    assert bars[0].close == 213.6
+    assert bars.closes.tolist() == [213.6]
 
 
 def test_in_memory_connector_rejects_unsupported_interval(
