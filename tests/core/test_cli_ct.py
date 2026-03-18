@@ -182,3 +182,45 @@ def test_cli_bars_command_prints_normalized_price_bars(
         "110000.0",
         "1528.0",
     ]
+
+
+def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
+    from neocortex import cli
+
+    fake_settings = object()
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        cli,
+        "load_dotenv",
+        lambda path, override=False: captured.update(
+            {"path": path, "override": override}
+        ),
+    )
+    monkeypatch.setattr(cli.FeishuSettings, "from_env", lambda: fake_settings)
+    monkeypatch.setattr(
+        cli,
+        "configure_logging",
+        lambda level: captured.update({"log_level": level}),
+    )
+
+    class FakeRunner:
+        def __init__(self, settings) -> None:
+            captured["settings"] = settings
+
+        def start(self) -> None:
+            captured["started"] = True
+
+    monkeypatch.setattr(cli, "FeishuLongConnectionRunner", FakeRunner)
+
+    exit_code = cli.main(
+        ["feishu", "longconn", "--env-file", ".env.local", "--log-level", "DEBUG"]
+    )
+
+    assert exit_code == 0
+    assert captured == {
+        "path": ".env.local",
+        "override": True,
+        "log_level": "DEBUG",
+        "settings": fake_settings,
+        "started": True,
+    }

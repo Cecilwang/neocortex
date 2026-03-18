@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 
+from neocortex.log import configure_logging
 from neocortex.storage import (
     DEFAULT_DB_PATH,
     backfill_company_profiles,
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    configure_logging(logging.INFO, format="%(levelname)s %(message)s")
     args = build_parser().parse_args()
     stats = backfill_company_profiles(
         args.db_path,
