@@ -41,9 +41,7 @@ class KDJIndicator(IndicatorSpec):
     key: str = "kdj"
     display_name: str = "KDJ"
     category: str = "momentum"
-    formula: str = (
-        "RSV over N periods, then K and D are recursively smoothed with (signal_window - 1) / signal_window previous value plus 1 / signal_window current input; J = 3 * K - 2 * D."
-    )
+    formula: str = "RSV over N periods, then K and D are recursively smoothed with (signal_window - 1) / signal_window previous value plus 1 / signal_window current input; J = 3 * K - 2 * D."
     interpretation: str = (
         "Oscillator family used to gauge short-term momentum and turning points."
     )
