@@ -90,17 +90,20 @@ def test_indicator_registry_exposes_minimal_metadata() -> None:
     from neocortex.indicators.ema import EMAParams
     from neocortex.indicators.kdj import KDJParams
     from neocortex.indicators.macd import MACDParams
+    from neocortex.indicators.roc import ROCParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
 
     indicators = {indicator.key: indicator for indicator in list_indicator_specs()}
 
-    assert tuple(indicators) == ("sma", "ema", "rsi", "macd", "kdj")
+    assert tuple(indicators) == ("sma", "ema", "roc", "rsi", "macd", "kdj")
     assert indicators["sma"].display_name == "Simple Moving Average"
     assert asdict(SMAParams()) == {"window": 20}
     assert "average" in indicators["sma"].formula.lower()
     assert asdict(EMAParams()) == {"window": 20}
     assert "recent prices" in indicators["ema"].interpretation.lower()
+    assert asdict(ROCParams()) == {"period": 20}
+    assert "percentage" in indicators["roc"].interpretation.lower()
     assert asdict(RSIParams()) == {"period": 14}
     assert "momentum" in indicators["rsi"].interpretation.lower()
     assert asdict(MACDParams()) == {
@@ -119,12 +122,14 @@ def test_indicator_params_can_be_built_from_dict() -> None:
     from neocortex.indicators.ema import EMAParams
     from neocortex.indicators.kdj import KDJParams
     from neocortex.indicators.macd import MACDParams
+    from neocortex.indicators.roc import ROCParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
 
     assert SMAParams.from_dict(None) == SMAParams(window=20)
     assert SMAParams.from_dict({"window": 3}) == SMAParams(window=3)
     assert EMAParams.from_dict({"window": 5}) == EMAParams(window=5)
+    assert ROCParams.from_dict({"period": 3}) == ROCParams(period=3)
     assert RSIParams.from_dict({"period": 7}) == RSIParams(period=7)
     assert KDJParams.from_dict({"window": 10, "signal_window": 5}) == KDJParams(
         window=10,
@@ -199,6 +204,22 @@ def test_calculate_indicator_returns_rsi_series(
         None,
         85.71428571428571,
         90.0,
+    ]
+
+
+def test_calculate_indicator_returns_roc_series(
+    sample_bars: PriceSeries,
+) -> None:
+    from neocortex.indicators import calculate_indicator
+
+    result = calculate_indicator("roc", sample_bars, parameters={"period": 3})
+
+    assert result.roc.tolist() == [
+        None,
+        None,
+        None,
+        5.0,
+        4.901960784313726,
     ]
 
 
@@ -406,6 +427,7 @@ def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
         ("unknown", None),
         ("sma", {"window": 0}),
         ("ema", {"window": -1}),
+        ("roc", {"period": 0}),
         ("rsi", {"period": 0}),
         ("kdj", {"window": 0}),
         ("kdj", {"window": 9, "signal_window": 0}),

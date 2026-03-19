@@ -39,6 +39,7 @@ def test_indicator_output_baseline() -> None:
 
     sma_result = calculate_indicator("sma", bars, parameters={"window": 3})
     ema_result = calculate_indicator("ema", bars, parameters={"window": 3})
+    roc_result = calculate_indicator("roc", bars, parameters={"period": 3})
     rsi_result = calculate_indicator("rsi", bars, parameters={"period": 3})
     macd_result = calculate_indicator(
         "macd",
@@ -49,6 +50,7 @@ def test_indicator_output_baseline() -> None:
     assert {
         "sma_3": sma_result.sma.tolist(),
         "ema_3": ema_result.ema.tolist(),
+        "roc_3": roc_result.roc.tolist(),
         "rsi_3": rsi_result.rsi.tolist(),
         "macd_3_4_2": macd_result.macd.tolist(),
         "signal_3_4_2": macd_result.signal.tolist(),
@@ -56,6 +58,7 @@ def test_indicator_output_baseline() -> None:
         "params": {
             "sma": asdict(sma_result.parameters),
             "ema": asdict(ema_result.parameters),
+            "roc": asdict(roc_result.parameters),
             "rsi": asdict(rsi_result.parameters),
             "macd": asdict(macd_result.parameters),
         },
@@ -75,6 +78,14 @@ def test_indicator_output_baseline() -> None:
             212.5,
             214.25,
             214.625,
+        ],
+        "roc_3": [
+            None,
+            None,
+            None,
+            1.9047619047619049,
+            1.8867924528301887,
+            1.8957345971563981,
         ],
         "rsi_3": [
             None,
@@ -111,6 +122,7 @@ def test_indicator_output_baseline() -> None:
         "params": {
             "sma": {"window": 3},
             "ema": {"window": 3},
+            "roc": {"period": 3},
             "rsi": {"period": 3},
             "macd": {
                 "fast_window": 3,

@@ -6,6 +6,7 @@ from neocortex.indicators.core import Indicator, IndicatorSpec
 from neocortex.indicators.ema import ema
 from neocortex.indicators.kdj import kdj
 from neocortex.indicators.macd import macd
+from neocortex.indicators.roc import roc
 from neocortex.indicators.rsi import rsi
 from neocortex.indicators.sma import sma
 from neocortex.models.core import PriceSeries
@@ -14,6 +15,7 @@ from neocortex.models.core import PriceSeries
 _INDICATORS: dict[str, IndicatorSpec] = {
     "sma": sma,
     "ema": ema,
+    "roc": roc,
     "rsi": rsi,
     "macd": macd,
     "kdj": kdj,
