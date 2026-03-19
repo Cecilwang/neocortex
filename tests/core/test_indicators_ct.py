@@ -41,16 +41,61 @@ def sample_bars() -> PriceSeries:
     )
 
 
+@pytest.fixture
+def flat_kdj_sample_bars() -> PriceSeries:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    bars = tuple(
+        PriceBar(
+            security_id=security_id,
+            timestamp=datetime(2026, 4, 1 + index, 15, 0),
+            open=100.0,
+            high=100.0,
+            low=100.0,
+            close=100.0,
+            volume=1_000_000.0 + index,
+        )
+        for index in range(11)
+    )
+    return PriceSeries(security_id=security_id, bars=bars)
+
+
+@pytest.fixture
+def kdj_sample_bars() -> PriceSeries:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    closes = (
+        100.0,
+        102.0,
+        101.0,
+        105.0,
+        107.0,
+        106.0,
+        108.0,
+        109.0,
+        110.0,
+        111.0,
+        109.0,
+        112.0,
+    )
+    return PriceSeries(
+        security_id=security_id,
+        bars=tuple(
+            _build_bar(security_id, day=10 + index, close=close)
+            for index, close in enumerate(closes)
+        ),
+    )
+
+
 def test_indicator_registry_exposes_minimal_metadata() -> None:
     from neocortex.indicators import list_indicator_specs
     from neocortex.indicators.ema import EMAParams
+    from neocortex.indicators.kdj import KDJParams
     from neocortex.indicators.macd import MACDParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
 
     indicators = {indicator.key: indicator for indicator in list_indicator_specs()}
 
-    assert tuple(indicators) == ("sma", "ema", "rsi", "macd")
+    assert tuple(indicators) == ("sma", "ema", "rsi", "macd", "kdj")
     assert indicators["sma"].display_name == "Simple Moving Average"
     assert asdict(SMAParams()) == {"window": 20}
     assert "average" in indicators["sma"].formula.lower()
@@ -65,10 +110,14 @@ def test_indicator_registry_exposes_minimal_metadata() -> None:
         "normalization": None,
     }
     assert "signal line" in indicators["macd"].formula.lower()
+    assert asdict(KDJParams()) == {"window": 9, "signal_window": 3}
+    assert "rsv" in indicators["kdj"].formula.lower()
+    assert "j = 3 * k - 2 * d" in indicators["kdj"].formula.lower()
 
 
 def test_indicator_params_can_be_built_from_dict() -> None:
     from neocortex.indicators.ema import EMAParams
+    from neocortex.indicators.kdj import KDJParams
     from neocortex.indicators.macd import MACDParams
     from neocortex.indicators.rsi import RSIParams
     from neocortex.indicators.sma import SMAParams
@@ -77,6 +126,10 @@ def test_indicator_params_can_be_built_from_dict() -> None:
     assert SMAParams.from_dict({"window": 3}) == SMAParams(window=3)
     assert EMAParams.from_dict({"window": 5}) == EMAParams(window=5)
     assert RSIParams.from_dict({"period": 7}) == RSIParams(period=7)
+    assert KDJParams.from_dict({"window": 10, "signal_window": 5}) == KDJParams(
+        window=10,
+        signal_window=5,
+    )
     assert MACDParams.from_dict(
         {
             "fast_window": 3,
@@ -223,6 +276,110 @@ def test_calculate_macd_indicator_supports_close_normalization(
     ]
 
 
+def test_calculate_kdj_indicator_returns_aligned_series(
+    kdj_sample_bars: PriceSeries,
+) -> None:
+    from neocortex.indicators import calculate_indicator
+    from neocortex.indicators.kdj import KDJParams
+
+    result = calculate_indicator(
+        "kdj",
+        kdj_sample_bars,
+        parameters=KDJParams(window=9, signal_window=3),
+    )
+
+    assert result.k.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        64.10256410256409,
+        73.5042735042735,
+        74.64387464387464,
+        79.76258309591643,
+    ]
+    assert result.d.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        54.70085470085469,
+        60.968660968660956,
+        65.52706552706552,
+        70.27223805001582,
+    ]
+    assert result.j.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        82.90598290598288,
+        98.57549857549859,
+        92.87749287749287,
+        98.74327318771765,
+    ]
+
+
+def test_calculate_kdj_indicator_uses_fifty_seed_when_range_is_flat(
+    flat_kdj_sample_bars: PriceSeries,
+) -> None:
+    from neocortex.indicators import calculate_indicator
+
+    result = calculate_indicator("kdj", flat_kdj_sample_bars)
+
+    assert result.k.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        49.99999999999999,
+        49.99999999999999,
+        49.99999999999999,
+    ]
+    assert result.d.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        49.99999999999999,
+        49.99999999999999,
+        49.99999999999999,
+    ]
+    assert result.j.tolist() == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        49.999999999999986,
+        49.999999999999986,
+        49.999999999999986,
+    ]
+
+
 def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
     from neocortex.indicators.sma import SMAParams, sma
     from neocortex.models import PriceSeries
@@ -250,6 +407,8 @@ def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
         ("sma", {"window": 0}),
         ("ema", {"window": -1}),
         ("rsi", {"period": 0}),
+        ("kdj", {"window": 0}),
+        ("kdj", {"window": 9, "signal_window": 0}),
         ("macd", {"fast_window": 5, "slow_window": 5, "signal_window": 2}),
         (
             "macd",

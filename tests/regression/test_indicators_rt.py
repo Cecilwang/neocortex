@@ -120,3 +120,79 @@ def test_indicator_output_baseline() -> None:
             },
         },
     }
+
+
+def test_kdj_output_baseline() -> None:
+    from neocortex.indicators import calculate_indicator
+
+    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
+    bars = PriceSeries(
+        security_id=security_id,
+        bars=(
+            _build_bar(security_id, 3, 210.0, 10_000_000.0),
+            _build_bar(security_id, 4, 212.0, 12_000_000.0),
+            _build_bar(security_id, 5, 211.0, 11_000_000.0),
+            _build_bar(security_id, 6, 214.0, 13_000_000.0),
+            _build_bar(security_id, 7, 216.0, 14_000_000.0),
+            _build_bar(security_id, 10, 215.0, 12_500_000.0),
+            _build_bar(security_id, 11, 217.0, 12_800_000.0),
+            _build_bar(security_id, 12, 218.0, 12_600_000.0),
+            _build_bar(security_id, 13, 220.0, 13_100_000.0),
+            _build_bar(security_id, 14, 221.0, 13_400_000.0),
+            _build_bar(security_id, 17, 219.0, 13_000_000.0),
+            _build_bar(security_id, 18, 222.0, 13_700_000.0),
+        ),
+    )
+
+    result = calculate_indicator("kdj", bars)
+
+    assert {
+        "k": result.k.tolist(),
+        "d": result.d.tolist(),
+        "j": result.j.tolist(),
+        "params": asdict(result.parameters),
+    } == {
+        "k": [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            61.9047619047619,
+            69.84126984126983,
+            70.37037037037037,
+            74.69135802469135,
+        ],
+        "d": [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            53.96825396825396,
+            59.25925925925925,
+            62.96296296296295,
+            66.87242798353908,
+        ],
+        "j": [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            77.77777777777777,
+            91.00529100529101,
+            85.18518518518519,
+            90.32921810699591,
+        ],
+        "params": {"window": 9, "signal_window": 3},
+    }

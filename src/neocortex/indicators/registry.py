@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from neocortex.indicators.core import Indicator, IndicatorSpec
 from neocortex.indicators.ema import ema
+from neocortex.indicators.kdj import kdj
 from neocortex.indicators.macd import macd
 from neocortex.indicators.rsi import rsi
 from neocortex.indicators.sma import sma
@@ -15,6 +16,7 @@ _INDICATORS: dict[str, IndicatorSpec] = {
     "ema": ema,
     "rsi": rsi,
     "macd": macd,
+    "kdj": kdj,
 }
 
 
