@@ -35,7 +35,6 @@ def test_agent_trace_captures_request_and_response_contract(
         as_of_date=date(2026, 3, 15),
         reasoning="Momentum remains constructive.",
         score=74.0,
-        confidence=0.81,
     )
     trace = AgentExecutionTrace(
         request=request,

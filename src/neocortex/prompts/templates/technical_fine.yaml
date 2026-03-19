@@ -36,18 +36,18 @@ user: |
   }
 
   This Month's Technical Indicators:
-  RoC 5day: {{ roc_5day }}%
-  RoC 10day: {{ roc_10day }}%
-  RoC 20day: {{ roc_20day }}%
-  RoC 1Month: {{ roc_1month }}%
-  RoC 3Month: {{ roc_3month }}%
-  RoC 6Month: {{ roc_6month }}%
-  RoC 12Month: {{ roc_12month }}%
-  RSI: {{ rsi }}
-  MACD: {{ macd }}
-  Signal: {{ signal }}
-  Hist: {{ hist }}
+  RoC 5day: {{ roc(period=5).roc.iloc[-1] }}%
+  RoC 10day: {{ roc(period=10).roc.iloc[-1] }}%
+  RoC 20day: {{ roc(period=20).roc.iloc[-1] }}%
+  RoC 1Month: {{ roc(period=21).roc.iloc[-1] }}%
+  RoC 3Month: {{ roc(period=63).roc.iloc[-1] }}%
+  RoC 6Month: {{ roc(period=126).roc.iloc[-1] }}%
+  RoC 12Month: {{ roc(period=252).roc.iloc[-1] }}%
+  RSI: {{ rsi(period=14).rsi.iloc[-1] }}
+  MACD: {{ macd(normalization="close").macd.iloc[-1] }}
+  Signal: {{ macd(normalization="close").signal.iloc[-1] }}
+  Hist: {{ macd(normalization="close").hist.iloc[-1] }}
   Stochastic
-  %K: {{ stochastic_k }}
-  %D: {{ stochastic_d }}
-  %J: {{ stochastic_j }}
+  %K: {{ kdj().k.iloc[-1] }}
+  %D: {{ kdj().d.iloc[-1] }}
+  %J: {{ kdj().j.iloc[-1] }}

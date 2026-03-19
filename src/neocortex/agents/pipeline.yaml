@@ -1,7 +1,15 @@
-technical_agent: technical_fine.yaml
-quant_fundamental_agent: quant_fundamental_fine.yaml
-qualitative_fundamental_agent: qualitative_fine.yaml
-news_agent: news_fine.yaml
-sector_agent: sector_fine.yaml
-macro_agent: macro_fine.yaml
-pm_agent: pm_fine.yaml
+technical_agent:
+  template: technical_fine.yaml
+  price_series_lookback_days: 400
+quant_fundamental_agent:
+  template: quant_fundamental_fine.yaml
+qualitative_fundamental_agent:
+  template: qualitative_fine.yaml
+news_agent:
+  template: news_fine.yaml
+sector_agent:
+  template: sector_fine.yaml
+macro_agent:
+  template: macro_fine.yaml
+pm_agent:
+  template: pm_fine.yaml

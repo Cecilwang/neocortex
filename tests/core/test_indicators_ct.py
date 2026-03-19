@@ -150,6 +150,41 @@ def test_indicator_params_can_be_built_from_dict() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("params_cls", "payload", "unknown_key"),
+    [
+        pytest.param("SMAParams", {"period": 3}, "period", id="sma"),
+        pytest.param("EMAParams", {"period": 3}, "period", id="ema"),
+        pytest.param("ROCParams", {"window": 3}, "window", id="roc"),
+        pytest.param("RSIParams", {"window": 3}, "window", id="rsi"),
+        pytest.param("MACDParams", {"period": 3}, "period", id="macd"),
+        pytest.param("KDJParams", {"period": 3}, "period", id="kdj"),
+    ],
+)
+def test_indicator_params_reject_unknown_keys(
+    params_cls: str,
+    payload: dict[str, object],
+    unknown_key: str,
+) -> None:
+    from neocortex.indicators.ema import EMAParams
+    from neocortex.indicators.kdj import KDJParams
+    from neocortex.indicators.macd import MACDParams
+    from neocortex.indicators.roc import ROCParams
+    from neocortex.indicators.rsi import RSIParams
+    from neocortex.indicators.sma import SMAParams
+
+    params_class = {
+        "SMAParams": SMAParams,
+        "EMAParams": EMAParams,
+        "ROCParams": ROCParams,
+        "RSIParams": RSIParams,
+        "MACDParams": MACDParams,
+        "KDJParams": KDJParams,
+    }[params_cls]
+    with pytest.raises(ValueError, match=unknown_key):
+        params_class.from_dict(payload)
+
+
 def test_calculate_indicator_returns_aligned_sma_series(
     sample_bars: PriceSeries,
 ) -> None:

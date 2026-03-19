@@ -1,5 +1,4 @@
 from datetime import date
-from types import SimpleNamespace
 
 from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
 from neocortex.models import (
@@ -12,6 +11,22 @@ from neocortex.models import (
     SecurityId,
 )
 from neocortex.pipeline import Pipeline
+
+
+_DEPENDENCY_MAP = {
+    AgentRole.TECHNICAL: (),
+    AgentRole.QUANT_FUNDAMENTAL: (),
+    AgentRole.QUALITATIVE_FUNDAMENTAL: (),
+    AgentRole.NEWS: (),
+    AgentRole.MACRO: (),
+    AgentRole.SECTOR: (
+        AgentRole.TECHNICAL,
+        AgentRole.QUANT_FUNDAMENTAL,
+        AgentRole.QUALITATIVE_FUNDAMENTAL,
+        AgentRole.NEWS,
+    ),
+    AgentRole.PM: (AgentRole.MACRO, AgentRole.SECTOR),
+}
 
 
 class RecordingTransport:
@@ -27,15 +42,16 @@ class RecordingAgent:
     def __init__(
         self,
         *,
-        system_prompt: str,
-        user_prompt: str,
-        dependencies: tuple[AgentRole, ...] = (),
         market_data=None,
+        config,
     ) -> None:
-        self.system_prompt = system_prompt
-        self.user_prompt = user_prompt
-        self.dependencies = dependencies
         self.market_data = market_data
+        self.config = config
+        self.system_prompt = f"{config['template']} system"
+        self.user_prompt = f"{config['template']} user"
+        self.dependencies = _DEPENDENCY_MAP[
+            AgentRole(config["template"].removesuffix(".yaml"))
+        ]
         self.calls: list[dict[str, object]] = []
 
     def run(
@@ -71,7 +87,6 @@ class RecordingAgent:
             as_of_date=build_kwargs["as_of_date"],
             reasoning=f"{self.role.value} reasoning",
             score=60.0,
-            confidence=None,
         )
         request = AgentRequest(
             request_id=str(build_kwargs["request_id"]),
@@ -92,17 +107,13 @@ def _recording_agent_class(role: AgentRole) -> type[RecordingAgent]:
         def __init__(
             self,
             *,
-            system_prompt: str,
-            user_prompt: str,
-            dependencies: tuple[AgentRole, ...] = (),
             market_data=None,
+            config,
         ) -> None:
             self.role = role
             super().__init__(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                dependencies=dependencies,
                 market_data=market_data,
+                config=config,
             )
 
     return _RoleRecordingAgent
@@ -124,42 +135,25 @@ def test_pipeline_injects_upstream_reports_into_sector_and_pm(monkeypatch) -> No
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     created: dict[AgentRole, RecordingAgent] = {}
 
-    dependency_map = {
-        AgentRole.TECHNICAL: (),
-        AgentRole.QUANT_FUNDAMENTAL: (),
-        AgentRole.QUALITATIVE_FUNDAMENTAL: (),
-        AgentRole.NEWS: (),
-        AgentRole.MACRO: (),
-        AgentRole.SECTOR: (
-            AgentRole.TECHNICAL,
-            AgentRole.QUANT_FUNDAMENTAL,
-            AgentRole.QUALITATIVE_FUNDAMENTAL,
-            AgentRole.NEWS,
-        ),
-        AgentRole.PM: (AgentRole.MACRO, AgentRole.SECTOR),
-    }
-
     def fake_load_pipeline_document(self):
         _ = self
-        return {role.value: f"{role.value}.yaml" for role in AgentRole}
-
-    def fake_load_prompt_template(template_name: str):
-        role = AgentRole(template_name.removesuffix(".yaml"))
-        return SimpleNamespace(
-            system=f"{role.value} system",
-            user=f"{role.value} user",
-            dependencies=dependency_map[role],
-        )
+        return {
+            role.value: {
+                "template": f"{role.value}.yaml",
+                **(
+                    {"price_series_lookback_days": 123}
+                    if role is AgentRole.TECHNICAL
+                    else {}
+                ),
+            }
+            for role in AgentRole
+        }
 
     agent_classes = {role: _recording_agent_class(role) for role in AgentRole}
 
     monkeypatch.setattr(
         "neocortex.pipeline.pipeline.Pipeline._load_pipeline_document",
         fake_load_pipeline_document,
-    )
-    monkeypatch.setattr(
-        "neocortex.pipeline.pipeline.load_prompt_template",
-        fake_load_prompt_template,
     )
     monkeypatch.setattr("neocortex.pipeline.pipeline._AGENT_CLASSES", agent_classes)
     pipeline = Pipeline(transport=RecordingTransport())
@@ -181,6 +175,7 @@ def test_pipeline_injects_upstream_reports_into_sector_and_pm(monkeypatch) -> No
         AgentRole.SECTOR,
         AgentRole.PM,
     )
+    assert created[AgentRole.TECHNICAL].config["price_series_lookback_days"] == 123
     assert len(created[AgentRole.SECTOR].calls[0]["analyst_reports"]) == 4
     assert created[AgentRole.PM].calls[0]["macro_report"].agent is AgentRole.MACRO
     assert created[AgentRole.PM].calls[0]["sector_report"].agent is AgentRole.SECTOR

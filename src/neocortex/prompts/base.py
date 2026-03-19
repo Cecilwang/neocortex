@@ -56,7 +56,10 @@ def _load_prompt_document(template_name: str) -> dict[str, Any]:
     return document
 
 
-def _render_template_text(template_text: str, **context: Any) -> str:
+def _render_template_text(
+    template_text: str,
+    **context: Any,
+) -> str:
     environment = Environment(
         undefined=StrictUndefined,
         trim_blocks=True,

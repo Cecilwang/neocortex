@@ -58,7 +58,6 @@ class AgentResponse:
     reasoning: str
 
     score: float | None
-    confidence: float | None
     raw_model_output: JsonDict = field(default_factory=dict)
 
 

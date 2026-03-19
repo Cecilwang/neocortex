@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import TypeVar
 
 import pandas as pd
@@ -45,6 +45,12 @@ class IndicatorParams:
     ) -> ParamsT:
         if payload is None:
             return cls()
+        allowed_keys = {field.name for field in fields(cls)}
+        extra_keys = tuple(sorted(set(payload) - allowed_keys))
+        if extra_keys:
+            raise ValueError(
+                f"{cls.__name__} received unknown parameter keys: {', '.join(extra_keys)}."
+            )
         return cls(**payload)
 
 

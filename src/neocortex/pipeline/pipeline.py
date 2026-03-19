@@ -19,7 +19,6 @@ from neocortex.agents.technical import TechnicalAgent
 from neocortex.connectors.base import MarketDataConnector
 from neocortex.llm import LLMInferenceConfig, LLMTransport
 from neocortex.models import AgentExecutionTrace, AgentRole, SecurityId
-from neocortex.prompts import load_prompt_template
 
 _AGENT_CLASSES: dict[AgentRole, type[Agent]] = {
     AgentRole.TECHNICAL: TechnicalAgent,
@@ -111,11 +110,11 @@ class Pipeline:
     def _load_agents(self) -> dict[AgentRole, Agent]:
         document = self._load_pipeline_document()
         return {
-            role: self._build_agent(role, template_name=document[role.value])
+            role: self._build_agent(role, config=document[role.value])
             for role in AgentRole
         }
 
-    def _load_pipeline_document(self) -> dict[str, str]:
+    def _load_pipeline_document(self) -> dict[str, dict[str, object]]:
         source = (
             resources.files("neocortex.agents")
             .joinpath(self.pipeline_config_name)
@@ -125,17 +124,14 @@ class Pipeline:
         if not isinstance(document, dict):
             raise ValueError("Pipeline config must be one YAML mapping.")
         for role in AgentRole:
-            template_name = document.get(role.value)
-            if not isinstance(template_name, str):
-                raise ValueError(f"Missing template name for {role.value}.")
+            config = document.get(role.value)
+            if not isinstance(config, dict):
+                raise ValueError(f"Missing config mapping for {role.value}.")
         return document
 
-    def _build_agent(self, role: AgentRole, *, template_name: str) -> Agent:
-        template = load_prompt_template(template_name)
+    def _build_agent(self, role: AgentRole, *, config: dict[str, object]) -> Agent:
         agent_class = _AGENT_CLASSES[role]
         return agent_class(
-            system_prompt=template.system,
-            user_prompt=template.user,
-            dependencies=template.dependencies,
             market_data=self.market_data,
+            config=config,
         )

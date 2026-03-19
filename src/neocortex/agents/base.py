@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import UTC, datetime
 from datetime import date
 from typing import Any, Mapping
@@ -17,7 +17,7 @@ from neocortex.models import (
     ResponseValidationStatus,
     SecurityId,
 )
-from neocortex.prompts import render_prompt_text
+from neocortex.prompts import load_prompt_template, render_prompt_text
 from neocortex.serialization import parse_json_object
 
 
@@ -29,21 +29,24 @@ class Agent(ABC):
     user_prompt: str
     dependencies: tuple[AgentRole, ...]
     market_data: MarketDataConnector
+    config: dict[str, object]
 
     def __init__(
         self,
         *,
-        system_prompt: str,
-        user_prompt: str,
-        dependencies: tuple[AgentRole, ...],
         market_data: MarketDataConnector,
+        config: Mapping[str, object],
     ) -> None:
-        self.system_prompt = system_prompt
-        self.user_prompt = user_prompt
-        self.dependencies = dependencies
         self.market_data = market_data
+        self.config = dict(config)
+        template_name = self.config.get("template")
+        if not isinstance(template_name, str):
+            raise ValueError("Agent config must contain a string 'template' field.")
+        template = load_prompt_template(template_name)
+        self.system_prompt = template.system
+        self.user_prompt = template.user
+        self.dependencies = template.dependencies
 
-    @abstractmethod
     def build_request(
         self,
         *,
@@ -54,13 +57,30 @@ class Agent(ABC):
     ) -> AgentRequest:
         """Build the normalized request payload for one agent invocation."""
 
-    @abstractmethod
+        _ = trace_by_role
+        return AgentRequest(
+            request_id=request_id,
+            agent=self.role,
+            security_id=security_id,
+            as_of_date=as_of_date,
+        )
+
     def build_response(
         self,
         request: AgentRequest,
         parsed_output: dict[str, Any],
     ) -> AgentResponse:
         """Build one normalized agent response from parsed model output."""
+
+        return AgentResponse(
+            request_id=request.request_id,
+            agent=request.agent,
+            security_id=request.security_id,
+            as_of_date=request.as_of_date,
+            reasoning=str(parsed_output["reason"]),
+            score=float(parsed_output["score"]),
+            raw_model_output=parsed_output,
+        )
 
     def get_system_prompt(self, request: AgentRequest) -> str:
         """Render the system prompt for one request."""
@@ -69,7 +89,10 @@ class Agent(ABC):
             raise ValueError(
                 f"{self.__class__.__name__} requires a {self.role} request."
             )
-        return render_prompt_text(self.system_prompt, **request.payload)
+        return render_prompt_text(
+            self.system_prompt,
+            **self.build_render_context(request),
+        )
 
     def get_user_prompt(self, request: AgentRequest) -> str:
         """Render the user prompt for one request."""
@@ -78,7 +101,15 @@ class Agent(ABC):
             raise ValueError(
                 f"{self.__class__.__name__} requires a {self.role} request."
             )
-        return render_prompt_text(self.user_prompt, **request.payload)
+        return render_prompt_text(
+            self.user_prompt,
+            **self.build_render_context(request),
+        )
+
+    def build_render_context(self, request: AgentRequest) -> dict[str, object]:
+        """Build one template context from the stored request payload."""
+
+        return dict(request.payload)
 
     def send(
         self,
