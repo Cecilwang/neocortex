@@ -47,6 +47,7 @@ class FeishuLongConnectionRunner:
         client.start()
 
     def _build_event_handler(self) -> lark.EventDispatcherHandler:
+        logger.info("Building Feishu long-connection event handler.")
         return (
             lark.EventDispatcherHandler.builder("", "")
             .register_p2_customized_event(

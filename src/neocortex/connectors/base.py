@@ -1,32 +1,131 @@
-"""Connector interface definitions for normalized market data access."""
+"""Shared base class for network-source connectors."""
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Protocol
+from typing import ClassVar
 
-from neocortex.models.core import (
-    CompanyProfile,
-    PriceSeries,
-    SecurityId,
+from neocortex.config import get_config
+from neocortex.connectors.types import (
+    AdjustmentFactorRecord,
+    DailyPriceBarRecord,
+    DisclosureSectionRecord,
+    FundamentalSnapshotRecord,
+    MacroPointRecord,
+    SecurityListing,
+    SecurityProfileSnapshot,
 )
+from neocortex.models.core import SecurityId
+from neocortex.models.core import Market
 
 DAILY_BAR_INTERVAL = "1d"
 
 
-class MarketDataConnector(Protocol):
-    """Runtime interface for provider adapters that return normalized models."""
+class BaseSourceConnector:
+    """Common runtime helpers and declared capabilities for source connectors."""
 
-    def get_company_profile(self, security_id: SecurityId) -> CompanyProfile:
-        """Return normalized company metadata for one security."""
+    source_name: ClassVar[str]
+    supported_markets: ClassVar[frozenset[Market]] = frozenset()
+    supports_adjustment_factors: ClassVar[bool] = False
+    supports_adjusted_daily_bars: ClassVar[bool] = False
 
-    def get_price_bars(
+    def __init__(
+        self,
+        *,
+        store=None,
+    ) -> None:
+        if not getattr(self, "source_name", "").strip():
+            raise ValueError("Source connectors must define a non-empty source_name.")
+        self._market_data_store = store
+
+    def supports_market(self, market: Market) -> bool:
+        return not self.supported_markets or market in self.supported_markets
+
+    def list_securities(self, *, market: Market) -> tuple[SecurityListing, ...]:
+        _ = market
+        raise NotImplementedError
+
+    def get_security_profile_snapshot(
+        self,
+        security_id: SecurityId,
+    ) -> SecurityProfileSnapshot:
+        _ = security_id
+        raise NotImplementedError
+
+    def get_daily_price_bars(
         self,
         security_id: SecurityId,
         *,
         start_date: date,
         end_date: date,
-        interval: str = DAILY_BAR_INTERVAL,
-        adjust: str | None = None,
-    ) -> PriceSeries:
-        """Return a normalized price series for one security."""
+    ) -> tuple[DailyPriceBarRecord, ...]:
+        _ = security_id, start_date, end_date
+        raise NotImplementedError
+
+    def get_adjusted_daily_price_bars(
+        self,
+        security_id: SecurityId,
+        *,
+        start_date: date,
+        end_date: date,
+        adjustment_type: str,
+    ) -> tuple[DailyPriceBarRecord, ...]:
+        _ = security_id, start_date, end_date, adjustment_type
+        raise NotImplementedError
+
+    def get_adjustment_factors(
+        self,
+        security_id: SecurityId,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[AdjustmentFactorRecord, ...]:
+        _ = security_id, start_date, end_date
+        raise NotImplementedError
+
+    def apply_adjustment(
+        self,
+        security_id: SecurityId,
+        *,
+        adjustment_type: str,
+        raw_daily_records: tuple[DailyPriceBarRecord, ...],
+    ) -> tuple[DailyPriceBarRecord, ...]:
+        _ = security_id, adjustment_type, raw_daily_records
+        raise NotImplementedError
+
+    def get_fundamental_snapshots(
+        self,
+        security_id: SecurityId,
+        *,
+        as_of_date: date,
+    ) -> tuple[FundamentalSnapshotRecord, ...]:
+        _ = security_id, as_of_date
+        raise NotImplementedError
+
+    def get_disclosure_sections(
+        self,
+        security_id: SecurityId,
+        *,
+        as_of_date: date,
+    ) -> tuple[DisclosureSectionRecord, ...]:
+        _ = security_id, as_of_date
+        raise NotImplementedError
+
+    def get_macro_points(
+        self,
+        *,
+        market: Market,
+        as_of_date: date,
+    ) -> tuple[MacroPointRecord, ...]:
+        _ = market, as_of_date
+        raise NotImplementedError
+
+    def _market_store(self):
+        from neocortex.storage.market_store import MarketDataStore
+
+        if self._market_data_store is None:
+            self._market_data_store = MarketDataStore(
+                get_config().storage.market_data_db_path
+            )
+        self._market_data_store.ensure_schema()
+        return self._market_data_store

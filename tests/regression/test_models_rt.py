@@ -2,8 +2,8 @@ from datetime import date, datetime
 
 import pytest
 
-from neocortex.connectors import InMemoryConnector, MarketDataConnector
 from neocortex.markets import get_market_context
+from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models.core import (
     CompanyProfile,
     DataProvider,
@@ -18,6 +18,7 @@ from neocortex.models.core import (
     SectorBenchmark,
     TradingCalendar,
 )
+from tests.core._market_data_provider_fakes import InMemoryMarketDataProvider
 
 
 @pytest.fixture
@@ -26,8 +27,8 @@ def security_id() -> SecurityId:
 
 
 @pytest.fixture
-def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
-    return InMemoryConnector(
+def in_memory_provider(security_id: SecurityId) -> InMemoryMarketDataProvider:
+    return InMemoryMarketDataProvider(
         company_profiles={
             security_id: CompanyProfile(
                 security_id=security_id,
@@ -57,13 +58,13 @@ def in_memory_connector(security_id: SecurityId) -> InMemoryConnector:
     )
 
 
-def test_market_data_connector_protocol_can_back_normalized_models(
-    in_memory_connector: InMemoryConnector,
+def test_market_data_provider_protocol_can_back_normalized_models(
+    in_memory_provider: InMemoryMarketDataProvider,
     security_id: SecurityId,
 ) -> None:
-    connector: MarketDataConnector = in_memory_connector
+    provider: MarketDataProvider = in_memory_provider
 
-    profile = connector.get_company_profile(security_id)
+    profile = provider.get_company_profile(security_id)
 
     assert profile.company_name == "Apple Inc."
 
@@ -139,7 +140,6 @@ def test_price_series_bars_uses_price_bar_columns(security_id: SecurityId) -> No
             "low": 208.5,
             "close": 211.4,
             "volume": 10_000_000,
-            "adjusted_close": None,
         }
     ]
 

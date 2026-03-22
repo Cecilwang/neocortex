@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import logging
 from typing import Mapping
 
 from neocortex.agents.base import Agent
-from neocortex.connectors.base import MarketDataConnector
-from neocortex.indicators import calculate_indicator, get_indicator_spec, list_indicator_specs
+from neocortex.indicators import (
+    calculate_indicator,
+    get_indicator_spec,
+    list_indicator_specs,
+)
+from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import (
     AgentRequest,
     AgentRole,
@@ -15,6 +20,7 @@ from neocortex.models import (
 )
 
 _PRICE_SERIES_LOOKBACK_DAYS = 400
+logger = logging.getLogger(__name__)
 
 
 class TechnicalAgent(Agent):
@@ -23,7 +29,7 @@ class TechnicalAgent(Agent):
     def __init__(
         self,
         *,
-        market_data: MarketDataConnector,
+        market_data: MarketDataProvider,
         config: Mapping[str, object],
     ) -> None:
         super().__init__(
@@ -33,6 +39,12 @@ class TechnicalAgent(Agent):
         self.price_series_lookback_days = _coerce_lookback_days(self.config)
 
     def build_render_context(self, request: AgentRequest) -> dict[str, object]:
+        logger.info(
+            "Building technical render context: security=%s as_of_date=%s lookback_days=%s",
+            request.security_id.ticker,
+            request.as_of_date,
+            self.price_series_lookback_days,
+        )
         price_series = self.market_data.get_price_bars(
             request.security_id,
             start_date=request.as_of_date
@@ -51,6 +63,12 @@ class TechnicalAgent(Agent):
         indicator_namespace = _IndicatorTemplateNamespace(price_series)
         for indicator in list_indicator_specs():
             context[indicator.key] = getattr(indicator_namespace, indicator.key)
+        logger.info(
+            "Technical render context ready: security=%s indicators=%s bars=%s",
+            request.security_id.ticker,
+            len(list_indicator_specs()),
+            len(price_series.bars),
+        )
         return context
 
 

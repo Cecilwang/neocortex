@@ -1,8 +1,8 @@
 import os
 
-from neocortex.config.env import load_dotenv
+from neocortex.config import get_config, load_dotenv, reset_config_cache
 from neocortex.feishu.settings import FeishuSettings
-from neocortex.storage.config import DEFAULT_DB_PATH
+from neocortex.models import Market
 
 
 def test_load_dotenv_reads_values_and_ignores_comments(tmp_path, monkeypatch) -> None:
@@ -46,9 +46,69 @@ def test_feishu_settings_use_default_storage_db_path(monkeypatch) -> None:
     monkeypatch.setenv("FEISHU_APP_ID", "cli_from_env")
     monkeypatch.setenv("FEISHU_APP_SECRET", "secret_from_env")
 
+    reset_config_cache()
+    app_config = get_config()
     settings = FeishuSettings.from_env()
 
-    assert settings.db_path == DEFAULT_DB_PATH
+    assert settings.db_path == app_config.storage.bot_db_path
+    assert settings.market_data_db_path == app_config.storage.market_data_db_path
+
+
+def test_get_config_reads_yaml_from_env_override(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "custom-config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "storage:",
+                "  bot_db_path: custom/bot.sqlite3",
+                "  market_data_db_path: custom/market.sqlite3",
+                "connectors:",
+                "  defaults:",
+                "    retry:",
+                "      max_attempts: 3",
+                "      backoff_seconds: 1.0",
+                "      retryable_exceptions: [RuntimeError, TimeoutError]",
+                "  akshare:",
+                "    retry:",
+                "      max_attempts: 2",
+                "      backoff_seconds: 0.5",
+                "      retryable_exceptions: [RuntimeError]",
+                "market_data_provider:",
+                "  source_priority:",
+                "    CN:",
+                "      daily_price_bars: [efinance, akshare]",
+                "      company_profile: [akshare]",
+                "      securities: [baostock]",
+                "      fundamentals: [baostock]",
+                "      disclosures: [baostock]",
+                "      macro: [baostock]",
+                "pipeline:",
+                "  agents:",
+                "    technical_agent:",
+                "      template: technical_fine.yaml",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NEOCORTEX_CONFIG_PATH", str(config_path))
+    reset_config_cache()
+
+    config = get_config()
+
+    assert config.storage.bot_db_path == tmp_path / "custom" / "bot.sqlite3"
+    assert config.storage.market_data_db_path == tmp_path / "custom" / "market.sqlite3"
+    assert config.market_data_provider.source_priority[Market.CN][
+        "daily_price_bars"
+    ] == (
+        "efinance",
+        "akshare",
+    )
+    assert config.connectors.retry_for("akshare").max_attempts == 2
+    assert config.connectors.retry_for("akshare").exc_info is False
+    assert (
+        config.pipeline.agents["technical_agent"]["template"] == "technical_fine.yaml"
+    )
+    reset_config_cache()
 
 
 def test_feishu_settings_do_not_load_default_dotenv_implicitly(

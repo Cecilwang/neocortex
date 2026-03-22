@@ -5,10 +5,11 @@ from __future__ import annotations
 from abc import ABC
 from datetime import UTC, datetime
 from datetime import date
+import logging
 from typing import Any, Mapping
 
-from neocortex.connectors.base import MarketDataConnector
 from neocortex.llm import LLMInferenceConfig, LLMTransport
+from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import (
     AgentExecutionTrace,
     AgentRequest,
@@ -20,6 +21,8 @@ from neocortex.models import (
 from neocortex.prompts import load_prompt_template, render_prompt_text
 from neocortex.serialization import parse_json_object
 
+logger = logging.getLogger(__name__)
+
 
 class Agent(ABC):
     """Common behavior contract shared by all agent implementations."""
@@ -28,13 +31,13 @@ class Agent(ABC):
     system_prompt: str
     user_prompt: str
     dependencies: tuple[AgentRole, ...]
-    market_data: MarketDataConnector
+    market_data: MarketDataProvider
     config: dict[str, object]
 
     def __init__(
         self,
         *,
-        market_data: MarketDataConnector,
+        market_data: MarketDataProvider,
         config: Mapping[str, object],
     ) -> None:
         self.market_data = market_data
@@ -46,6 +49,12 @@ class Agent(ABC):
         self.system_prompt = template.system
         self.user_prompt = template.user
         self.dependencies = template.dependencies
+        logger.debug(
+            "Initialized agent role=%s template=%s dependencies=%s",
+            getattr(self, "role", "unknown"),
+            template_name,
+            [dependency.value for dependency in self.dependencies],
+        )
 
     def build_request(
         self,
@@ -120,6 +129,12 @@ class Agent(ABC):
     ) -> AgentResponse:
         """Render the prompt, send it through the configured transport, and parse JSON."""
 
+        logger.info(
+            "Sending agent request: role=%s request_id=%s security=%s",
+            self.role.value,
+            request.request_id,
+            request.security_id.ticker,
+        )
         raw_output = transport.complete(
             agent=self.role,
             system_prompt=self.get_system_prompt(request),
@@ -127,6 +142,12 @@ class Agent(ABC):
             inference_config=inference_config,
         )
         parsed_output = parse_json_object(raw_output)
+        logger.info(
+            "Received agent response: role=%s request_id=%s score=%s",
+            self.role.value,
+            request.request_id,
+            parsed_output.get("score"),
+        )
         return self.build_response(request, parsed_output)
 
     def run(
@@ -141,6 +162,13 @@ class Agent(ABC):
     ) -> AgentExecutionTrace:
         """Build, render, send, and wrap one agent invocation into a trace."""
 
+        logger.info(
+            "Agent run started: role=%s request_id=%s security=%s as_of_date=%s",
+            self.role.value,
+            request_id,
+            security_id.ticker,
+            as_of_date,
+        )
         request = self.build_request(
             request_id=request_id,
             security_id=security_id,
@@ -151,6 +179,11 @@ class Agent(ABC):
         try:
             response = self.send(request, inference_config, transport=transport)
         except Exception as exc:
+            logger.exception(
+                "Agent run failed: role=%s request_id=%s",
+                self.role.value,
+                request_id,
+            )
             return AgentExecutionTrace(
                 request=request,
                 response=None,
@@ -160,6 +193,11 @@ class Agent(ABC):
                 response_validation_status=ResponseValidationStatus.FAILED,
                 response_validation_errors=(str(exc),),
             )
+        logger.info(
+            "Agent run finished: role=%s request_id=%s",
+            self.role.value,
+            request_id,
+        )
         return AgentExecutionTrace(
             request=request,
             response=response,

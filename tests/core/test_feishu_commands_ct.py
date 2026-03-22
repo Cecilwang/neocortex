@@ -11,22 +11,17 @@ def test_parse_help_command() -> None:
     assert command.text == "/neo help"
 
 
-def test_parse_backfill_profiles_command() -> None:
-    command = parse_command(
-        "/neo backfill profiles --limit 12 --workers 2 --retry-count 3 "
-        "--sleep-seconds 0.5 --timeout 8"
-    )
+def test_parse_pipeline_run_command() -> None:
+    command = parse_command("/neo pipeline run 600519 XSHG 2026-03-19")
 
     assert command is not None
-    assert command.name == "backfill_profiles"
+    assert command.name == "pipeline_run"
     assert command.requires_admin is True
     assert command.asynchronous is True
     assert command.args == {
-        "limit": 12,
-        "workers": 2,
-        "retry_count": 3,
-        "sleep_seconds": 0.5,
-        "timeout": 8.0,
+        "symbol": "600519",
+        "exchange": "XSHG",
+        "as_of_date": "2026-03-19",
     }
 
 

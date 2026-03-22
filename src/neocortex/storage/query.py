@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Sequence
+
+logger = logging.getLogger(__name__)
 
 
 def build_query(*, sql: str | None, table: str | None, limit: int) -> str:
     """Return one read query from either raw SQL or table selection."""
 
     if sql is not None:
+        logger.info("Built query from raw SQL: length=%s", len(sql))
         return sql
     assert table is not None
-    return f"SELECT * FROM {table} LIMIT {limit}"
+    query = f"SELECT * FROM {table} LIMIT {limit}"
+    logger.info("Built table query: table=%s limit=%s", table, limit)
+    return query
 
 
 def execute_query(
@@ -20,10 +26,17 @@ def execute_query(
 ) -> tuple[tuple[str, ...], list[tuple[object, ...]]]:
     """Execute one SQLite query and return headers plus rows."""
 
+    logger.info("Executing SQLite query: db_path=%s length=%s", db_path, len(query))
     with sqlite3.connect(db_path) as connection:
         cursor = connection.execute(query)
         columns = tuple(description[0] for description in cursor.description or ())
         rows = cursor.fetchall()
+    logger.info(
+        "SQLite query completed: db_path=%s columns=%s rows=%s",
+        db_path,
+        len(columns),
+        len(rows),
+    )
     return columns, rows
 
 

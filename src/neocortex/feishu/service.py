@@ -38,7 +38,7 @@ class FeishuBotService:
         self.client = client or FeishuClient(settings)
         self.action_runner = action_runner or BotActionRunner(
             store=self.store,
-            db_path=settings.db_path,
+            db_path=settings.market_data_db_path,
         )
         self.executor = executor or ThreadPoolExecutor(max_workers=settings.job_workers)
         logger.info(

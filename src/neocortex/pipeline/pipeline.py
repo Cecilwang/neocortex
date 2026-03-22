@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from importlib import resources
-
-import yaml
+import logging
 
 from neocortex.agents.base import Agent
 from neocortex.agents.macro import MacroAgent
@@ -16,8 +14,9 @@ from neocortex.agents.qualitative_fundamental import QualitativeFundamentalAgent
 from neocortex.agents.quant_fundamental import QuantFundamentalAgent
 from neocortex.agents.sector import SectorAgent
 from neocortex.agents.technical import TechnicalAgent
-from neocortex.connectors.base import MarketDataConnector
+from neocortex.config import get_config
 from neocortex.llm import LLMInferenceConfig, LLMTransport
+from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import AgentExecutionTrace, AgentRole, SecurityId
 
 _AGENT_CLASSES: dict[AgentRole, type[Agent]] = {
@@ -30,18 +29,20 @@ _AGENT_CLASSES: dict[AgentRole, type[Agent]] = {
     AgentRole.PM: PMAgent,
 }
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class Pipeline:
     """Recursive multi-agent pipeline built from one packaged YAML config."""
 
     transport: LLMTransport | None = None
-    pipeline_config_name: str = "pipeline.yaml"
-    market_data: MarketDataConnector | None = None
+    market_data: MarketDataProvider | None = None
     agents: dict[AgentRole, Agent] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         self.agents = self._load_agents()
+        logger.info("Pipeline initialized with %s agents.", len(self.agents))
 
     def get_agent(self, role: AgentRole) -> Agent:
         """Return one already-constructed agent from the pipeline."""
@@ -59,6 +60,12 @@ class Pipeline:
         if self.transport is None:
             raise RuntimeError("Pipeline requires a transport to run agents.")
 
+        logger.info(
+            "Pipeline run started: security=%s as_of_date=%s request_id=%s",
+            security_id.ticker,
+            as_of_date,
+            request_id,
+        )
         trace_by_role: dict[AgentRole, AgentExecutionTrace] = {}
         self.run_agent(
             AgentRole.PM,
@@ -67,6 +74,12 @@ class Pipeline:
             request_id=request_id,
             inference_config=inference_config,
             trace_by_role=trace_by_role,
+        )
+        logger.info(
+            "Pipeline run finished: security=%s request_id=%s traces=%s",
+            security_id.ticker,
+            request_id,
+            len(trace_by_role),
         )
         return trace_by_role
 
@@ -83,9 +96,15 @@ class Pipeline:
         if self.transport is None:
             raise RuntimeError("Pipeline requires a transport to run agents.")
         if role in trace_by_role:
+            logger.debug("Pipeline cache hit for agent role=%s.", role.value)
             return trace_by_role[role]
 
         agent = self.get_agent(role)
+        logger.info(
+            "Pipeline running agent role=%s dependencies=%s",
+            role.value,
+            [dependency.value for dependency in agent.dependencies],
+        )
         for dependency in agent.dependencies:
             self.run_agent(
                 dependency,
@@ -105,22 +124,26 @@ class Pipeline:
             trace_by_role=trace_by_role,
         )
         trace_by_role[role] = trace
+        logger.info(
+            "Pipeline completed agent role=%s status=%s",
+            role.value,
+            trace.response_validation_status.value,
+        )
         return trace
 
     def _load_agents(self) -> dict[AgentRole, Agent]:
         document = self._load_pipeline_document()
-        return {
+        agents = {
             role: self._build_agent(role, config=document[role.value])
             for role in AgentRole
         }
+        logger.debug(
+            "Loaded pipeline agent configs for roles=%s", [r.value for r in agents]
+        )
+        return agents
 
     def _load_pipeline_document(self) -> dict[str, dict[str, object]]:
-        source = (
-            resources.files("neocortex.agents")
-            .joinpath(self.pipeline_config_name)
-            .read_text(encoding="utf-8")
-        )
-        document = yaml.safe_load(source)
+        document = get_config().pipeline.agents
         if not isinstance(document, dict):
             raise ValueError("Pipeline config must be one YAML mapping.")
         for role in AgentRole:

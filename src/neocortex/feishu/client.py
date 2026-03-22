@@ -31,6 +31,7 @@ class FeishuClient:
         )
         self._tenant_access_token: str | None = None
         self._token_deadline: float = 0.0
+        logger.info("Initialized FeishuClient: base_url=%s", settings.base_url)
 
     def send_text(self, *, chat_id: str, text: str) -> None:
         """Send one text message into the target chat."""
@@ -57,6 +58,13 @@ class FeishuClient:
         params: dict[str, str] | None = None,
         json: dict[str, object] | None = None,
     ) -> dict[str, object]:
+        logger.info(
+            "Calling Feishu API: method=%s path=%s has_params=%s has_json=%s",
+            method,
+            path,
+            params is not None,
+            json is not None,
+        )
         headers = {"Authorization": f"Bearer {self._get_tenant_access_token()}"}
         response = self.http_client.request(
             method,
@@ -75,6 +83,7 @@ class FeishuClient:
     def _get_tenant_access_token(self) -> str:
         now = monotonic()
         if self._tenant_access_token is not None and now < self._token_deadline:
+            logger.debug("Using cached Feishu tenant access token.")
             return self._tenant_access_token
 
         logger.debug("Refreshing Feishu tenant access token.")
@@ -94,4 +103,5 @@ class FeishuClient:
         expire = int(document.get("expire", 7200))
         self._tenant_access_token = token
         self._token_deadline = now + max(expire - _TOKEN_REFRESH_BUFFER_SECONDS, 1)
+        logger.info("Refreshed Feishu tenant access token: expires_in=%s", expire)
         return token

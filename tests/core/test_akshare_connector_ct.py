@@ -1,19 +1,12 @@
-from datetime import date, datetime
+from datetime import date
 
 import pandas as pd
 import pytest
 
 from neocortex.connectors import AkShareConnector
+from neocortex.connectors.types import SecurityListing
 from neocortex.markets import get_market_context
-from neocortex.models import (
-    Exchange,
-    Market,
-    PRICE_BAR_ADJUSTED_CLOSE,
-    PRICE_BAR_CLOSE,
-    PRICE_BAR_TIMESTAMP,
-    PRICE_BAR_VOLUME,
-    SecurityId,
-)
+from neocortex.models import Exchange, Market, SecurityId
 
 
 class FakeAkShareAPI:
@@ -52,6 +45,24 @@ class FakeAkShareAPI:
                 "最高": [1520.0, 1533.0],
                 "最低": [1498.0, 1505.0],
                 "成交量": [120000.0, 110000.0],
+            }
+        )
+
+    def stock_individual_basic_info_xq(
+        self, symbol: str, timeout: float | None
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "item": [
+                    "org_name_cn",
+                    "org_short_name_cn",
+                    "affiliate_industry",
+                ],
+                "value": [
+                    "贵州茅台酒股份有限公司",
+                    "贵州茅台",
+                    {"ind_code": "BK0088", "ind_name": "白酒"},
+                ],
             }
         )
 
@@ -179,10 +190,10 @@ def test_akshare_connector_falls_back_to_xueqiu_company_profile(
     api = FailingEastmoneyProfileAkShareAPI()
     connector = AkShareConnector(timeout=3.0, api=api)
 
-    profile = connector.get_company_profile(security_id)
+    profile = connector.get_security_profile_snapshot(security_id)
 
     assert api.last_xueqiu_symbol == expected_symbol
-    assert profile.company_name == "贵州茅台"
+    assert profile.provider_company_name == "贵州茅台"
     assert profile.industry == "白酒"
     assert profile.sector == "白酒"
     assert profile.currency == "CNY"
@@ -201,42 +212,51 @@ class UniverseAkShareAPI(FakeAkShareAPI):
 def test_akshare_connector_fetches_cn_security_universe() -> None:
     connector = AkShareConnector(api=UniverseAkShareAPI())
 
-    frame = connector.get_cn_security_list()
+    listings = connector.list_securities(market=Market.CN)
 
-    assert frame.to_dict(orient="records") == [
-        {"code": "600519", "name": "贵州茅台"},
-        {"code": "000001", "name": "平安银行"},
-    ]
+    assert listings == (
+        SecurityListing(
+            security_id=SecurityId(
+                symbol="600519",
+                market=Market.CN,
+                exchange=Exchange.XSHG,
+            ),
+            name="贵州茅台",
+        ),
+        SecurityListing(
+            security_id=SecurityId(
+                symbol="000001",
+                market=Market.CN,
+                exchange=Exchange.XSHE,
+            ),
+            name="平安银行",
+        ),
+    )
 
 
-def test_akshare_connector_normalizes_cn_profile_and_daily_bars() -> None:
+def test_akshare_connector_normalizes_cn_profile_and_adjusted_daily_bars() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
-    connector = AkShareConnector(timeout=3.0, api=FakeAkShareAPI())
+    connector = AkShareConnector(
+        timeout=3.0,
+        api=FakeAkShareAPI(),
+    )
 
-    profile = connector.get_company_profile(security_id)
-    bars = connector.get_price_bars(
+    profile = connector.get_security_profile_snapshot(security_id)
+    records = connector.get_adjusted_daily_price_bars(
         security_id,
         start_date=date(2026, 3, 14),
         end_date=date(2026, 3, 15),
-        adjust="qfq",
+        adjustment_type="qfq",
     )
     market_context = get_market_context(Market.CN)
 
-    assert profile.company_name == "贵州茅台"
+    assert profile.provider_company_name == "贵州茅台"
     assert profile.industry == "酿酒行业"
     assert profile.sector == "酿酒行业"
     assert profile.currency == "CNY"
-    assert bars.security_id == security_id
-    assert len(bars) == 2
-    assert [
-        timestamp.to_pydatetime() for timestamp in bars.bars[PRICE_BAR_TIMESTAMP]
-    ] == [
-        datetime(2026, 3, 14, 15, 0),
-        datetime(2026, 3, 15, 15, 0),
-    ]
-    assert bars.bars[PRICE_BAR_CLOSE].tolist() == [1515.0, 1528.0]
-    assert bars.bars[PRICE_BAR_VOLUME].tolist() == [12_000_000.0, 11_000_000.0]
-    assert bars.bars[PRICE_BAR_ADJUSTED_CLOSE].tolist() == [1515.0, 1528.0]
+    assert [record.trade_date for record in records] == ["2026-03-14", "2026-03-15"]
+    assert [record.close for record in records] == [1515.0, 1528.0]
+    assert [record.volume for record in records] == [12_000_000.0, 11_000_000.0]
     assert market_context.timezone == "Asia/Shanghai"
     assert market_context.benchmark_symbol == "000300.SH"
 
@@ -246,20 +266,7 @@ def test_akshare_connector_rejects_non_cn_security() -> None:
     security_id = SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
 
     with pytest.raises(ValueError, match="supports only CN securities"):
-        connector.get_company_profile(security_id)
-
-
-def test_akshare_connector_rejects_non_daily_interval() -> None:
-    connector = AkShareConnector(api=FakeAkShareAPI())
-    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
-
-    with pytest.raises(ValueError, match="supports only the 1d interval"):
-        connector.get_price_bars(
-            security_id,
-            start_date=date(2026, 3, 14),
-            end_date=date(2026, 3, 15),
-            interval="1h",
-        )
+        connector.get_security_profile_snapshot(security_id)
 
 
 def test_akshare_connector_rejects_unsupported_cn_exchange() -> None:
@@ -267,7 +274,7 @@ def test_akshare_connector_rejects_unsupported_cn_exchange() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XBJS)
 
     with pytest.raises(ValueError, match="requires an XSHG or XSHE listing exchange"):
-        connector.get_company_profile(security_id)
+        connector.get_security_profile_snapshot(security_id)
 
 
 def test_akshare_connector_uses_unadjusted_series_when_adjust_is_none() -> None:
@@ -275,31 +282,48 @@ def test_akshare_connector_uses_unadjusted_series_when_adjust_is_none() -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     connector = AkShareConnector(timeout=3.0, api=api)
 
-    bars = connector.get_price_bars(
+    records = connector.get_daily_price_bars(
         security_id,
         start_date=date(2026, 3, 14),
         end_date=date(2026, 3, 15),
     )
 
     assert api.last_adjust == ""
-    assert bars.bars[PRICE_BAR_ADJUSTED_CLOSE].tolist() == [None, None]
+    assert [record.close for record in records] == [1515.0, 1528.0]
 
 
-def test_akshare_connector_returns_empty_tuple_when_provider_has_no_bars() -> None:
+def test_akshare_connector_fetches_adjusted_daily_price_bars() -> None:
+    api = RecordingAkShareAPI()
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
-    connector = AkShareConnector(api=EmptyBarsAkShareAPI())
+    connector = AkShareConnector(timeout=3.0, api=api)
 
-    bars = connector.get_price_bars(
+    records = connector.get_adjusted_daily_price_bars(
         security_id,
         start_date=date(2026, 3, 14),
         end_date=date(2026, 3, 15),
+        adjustment_type="hfq",
     )
 
-    assert bars.bars.empty
+    assert api.last_adjust == "hfq"
+    assert records[0].trade_date == "2026-03-14"
+    assert records[0].close == 1515.0
+    assert records[1].volume == 11_000_000.0
+
+
+def test_akshare_connector_raises_when_provider_has_no_bars() -> None:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    connector = AkShareConnector(api=EmptyBarsAkShareAPI())
+
+    with pytest.raises(KeyError):
+        connector.get_daily_price_bars(
+            security_id,
+            start_date=date(2026, 3, 14),
+            end_date=date(2026, 3, 15),
+        )
 
 
 @pytest.mark.parametrize("missing_field", ["股票简称", "行业"])
-def test_akshare_connector_raises_raw_key_error_for_missing_required_profile_fields(
+def test_akshare_connector_falls_back_to_xueqiu_when_em_profile_is_incomplete(
     missing_field: str,
 ) -> None:
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
@@ -308,7 +332,8 @@ def test_akshare_connector_raises_raw_key_error_for_missing_required_profile_fie
         api=MissingProfileFieldAkShareAPI(missing_field),
     )
 
-    with pytest.raises(KeyError) as exc_info:
-        connector.get_company_profile(security_id)
+    snapshot = connector.get_security_profile_snapshot(security_id)
 
-    assert exc_info.value.args == (missing_field,)
+    assert snapshot.provider_company_name == "贵州茅台"
+    assert snapshot.industry == "白酒"
+    assert snapshot.sector == "白酒"

@@ -1,0 +1,57 @@
+storage:
+  bot_db_path: data/feishu_bot.sqlite3
+  market_data_db_path: data/market_data.sqlite3
+
+connectors:
+  defaults:
+    retry:
+      max_attempts: 3
+      backoff_seconds: 1.0
+      exc_info: false
+      retryable_exceptions: [RuntimeError, TimeoutError]
+  akshare:
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1.0
+      exc_info: false
+      retryable_exceptions: [RuntimeError, TimeoutError]
+  baostock:
+    retry:
+      max_attempts: 3
+      backoff_seconds: 1.0
+      exc_info: false
+      retryable_exceptions: [RuntimeError, TimeoutError]
+  efinance:
+    retry:
+      max_attempts: 3
+      backoff_seconds: 1.0
+      exc_info: false
+      retryable_exceptions: [RuntimeError, TimeoutError]
+
+market_data_provider:
+  source_priority:
+    CN:
+      securities: [baostock, efinance, akshare]
+      company_profile: [baostock, efinance, akshare]
+      daily_price_bars: [baostock, efinance, akshare]
+      fundamentals: [baostock]
+      disclosures: [baostock]
+      macro: [baostock]
+
+pipeline:
+  agents:
+    technical_agent:
+      template: technical_fine.yaml
+      price_series_lookback_days: 400
+    quant_fundamental_agent:
+      template: quant_fundamental_fine.yaml
+    qualitative_fundamental_agent:
+      template: qualitative_fine.yaml
+    news_agent:
+      template: news_fine.yaml
+    sector_agent:
+      template: sector_fine.yaml
+    macro_agent:
+      template: macro_fine.yaml
+    pm_agent:
+      template: pm_fine.yaml

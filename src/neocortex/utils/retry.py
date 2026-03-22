@@ -1,42 +1,67 @@
-"""Retry helpers for unstable upstream integrations."""
+"""Shared retry helpers for network-facing operations."""
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar, overload
 
+from neocortex.config import get_config
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
-def call_with_retries(
-    operation: Callable[[], T],
+@overload
+def connector_retry(func: Callable[..., T], /) -> Callable[..., T]: ...
+
+
+@overload
+def connector_retry(
+    func: None = None,
+    /,
     *,
-    retry_count: int = 0,
-    sleep_seconds: float = 0.0,
-    logger: logging.Logger | None = None,
-    description: str = "Operation failed",
-    exc_info: bool = False,
-) -> T:
-    """Call one operation with bounded retries and optional logging."""
+    source_name: str | None = None,
+) -> Callable[[Callable[..., T]], Callable[..., T]]: ...
 
-    total_attempts = retry_count + 1
-    for attempt in range(1, total_attempts + 1):
-        try:
-            return operation()
-        except Exception:
-            if attempt >= total_attempts:
-                raise
-            if logger is not None:
-                logger.warning(
-                    "%s on attempt %s/%s, retrying.",
-                    description,
-                    attempt,
-                    total_attempts,
-                    exc_info=exc_info,
-                )
-            if sleep_seconds > 0:
-                time.sleep(sleep_seconds)
 
-    raise AssertionError("Retry loop exited without returning or raising.")
+def connector_retry(
+    func: Callable[..., T] | None = None,
+    /,
+    *,
+    source_name: str | None = None,
+) -> Callable[..., Any]:
+    """Retry one callable according to configured connector or default retry config."""
+
+    def decorator(inner: Callable[..., T]) -> Callable[..., T]:
+        @functools.wraps(inner)
+        def wrapper(*args, **kwargs) -> T:
+            retry_config = get_config().connectors.retry_for(source_name or "")
+            attempts = retry_config.max_attempts
+            for attempt in range(1, attempts + 1):
+                try:
+                    return inner(*args, **kwargs)
+                except retry_config.retryable_exceptions as exc:
+                    if attempt >= attempts:
+                        raise
+                    logger.warning(
+                        "Retrying after attempt %s/%s due to %s: %s",
+                        attempt,
+                        attempts,
+                        type(exc).__name__,
+                        exc,
+                        exc_info=retry_config.exc_info,
+                    )
+                    if retry_config.backoff_seconds > 0:
+                        time.sleep(retry_config.backoff_seconds)
+
+            raise AssertionError("Retry wrapper exited without returning or raising.")
+
+        return wrapper
+
+    if func is not None:
+        return decorator(func)
+    return decorator

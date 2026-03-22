@@ -1,43 +1,67 @@
 import logging
 
-import pytest
-
-from neocortex.utils.retry import call_with_retries
+from neocortex.utils.retry import connector_retry
 
 
-def test_call_with_retries_returns_after_transient_failures() -> None:
-    attempts = {"count": 0}
+def test_connector_retry_uses_configured_attempt_budget(monkeypatch) -> None:
+    class DummyWorker:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    def flaky() -> str:
-        attempts["count"] += 1
-        if attempts["count"] < 3:
-            raise RuntimeError("try again")
-        return "ok"
+        @connector_retry(source_name="baostock")
+        def flaky(self) -> str:
+            self.calls += 1
+            if self.calls < 3:
+                raise RuntimeError("try again")
+            return "ok"
 
-    result = call_with_retries(
-        flaky,
-        retry_count=2,
-        logger=logging.getLogger(__name__),
-        description="transient failure",
-    )
+    slept: list[float] = []
+    monkeypatch.setattr("neocortex.utils.retry.time.sleep", slept.append)
+    connector = DummyWorker()
 
-    assert result == "ok"
-    assert attempts["count"] == 3
+    assert connector.flaky() == "ok"
+    assert connector.calls == 3
+    assert slept == [1.0, 1.0]
 
 
-def test_call_with_retries_raises_after_exhausting_attempts() -> None:
-    attempts = {"count": 0}
+def test_connector_retry_logs_compact_message(caplog, monkeypatch) -> None:
+    class DummyWorker:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    def always_fail() -> None:
-        attempts["count"] += 1
-        raise RuntimeError("still broken")
+        @connector_retry(source_name="baostock")
+        def flaky(self) -> str:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary")
+            return "ok"
 
-    with pytest.raises(RuntimeError, match="still broken"):
-        call_with_retries(
-            always_fail,
-            retry_count=2,
-            logger=logging.getLogger(__name__),
-            description="persistent failure",
-        )
+    monkeypatch.setattr("neocortex.utils.retry.time.sleep", lambda _: None)
+    connector = DummyWorker()
 
-    assert attempts["count"] == 3
+    with caplog.at_level(logging.WARNING):
+        assert connector.flaky() == "ok"
+
+    assert "Retrying after attempt 1/3 due to RuntimeError: temporary" in caplog.text
+    assert caplog.records[0].exc_info is False
+
+
+def test_connector_retry_without_source_name_uses_default_config(monkeypatch) -> None:
+    class PlainWorker:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        @connector_retry
+        def flaky(self) -> str:
+            self.calls += 1
+            if self.calls < 3:
+                raise RuntimeError("try again")
+            return "ok"
+
+    slept: list[float] = []
+    monkeypatch.setattr("neocortex.utils.retry.time.sleep", slept.append)
+    worker = PlainWorker()
+
+    assert worker.flaky() == "ok"
+    assert worker.calls == 3
+    assert slept == [1.0, 1.0]

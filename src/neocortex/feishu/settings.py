@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from neocortex.storage.config import DEFAULT_DB_PATH
+from neocortex.config import get_config
 
 
 def _split_csv(value: str) -> frozenset[str]:
@@ -20,7 +20,8 @@ class FeishuSettings:
     app_id: str
     app_secret: str
     base_url: str = "https://open.feishu.cn"
-    db_path: Path = DEFAULT_DB_PATH
+    db_path: Path = Path("data/feishu_bot.sqlite3")
+    market_data_db_path: Path = Path("data/market_data.sqlite3")
     admin_open_ids: frozenset[str] = frozenset()
     max_reply_chars: int = 3500
     job_workers: int = 4
@@ -29,6 +30,7 @@ class FeishuSettings:
     def from_env(cls) -> FeishuSettings:
         """Load required settings from environment variables."""
 
+        app_config = get_config()
         app_id = os.environ["FEISHU_APP_ID"]
         app_secret = os.environ["FEISHU_APP_SECRET"]
         admin_open_ids = _split_csv(os.environ.get("FEISHU_ADMIN_OPEN_IDS", ""))
@@ -39,7 +41,8 @@ class FeishuSettings:
             app_id=app_id,
             app_secret=app_secret,
             base_url=base_url,
-            db_path=DEFAULT_DB_PATH,
+            db_path=app_config.storage.bot_db_path,
+            market_data_db_path=app_config.storage.market_data_db_path,
             admin_open_ids=admin_open_ids,
             max_reply_chars=max_reply_chars,
             job_workers=job_workers,

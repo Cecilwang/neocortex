@@ -22,8 +22,8 @@ class RecordingRunner(BotActionRunner):
 
     def run(self, command: BotCommand) -> str:
         self.commands.append(command.name)
-        if command.name == "backfill_profiles":
-            return "Backfill complete: processed=1 fetched=1 skipped_unsupported=0 failed=0"
+        if command.name == "pipeline_run":
+            return "Pipeline run placeholder completed."
         return super().run(command)
 
 
@@ -95,7 +95,9 @@ def test_non_admin_async_command_is_rejected(tmp_path) -> None:
     client = FakeClient()
     service = FeishuBotService(_settings(tmp_path), client=client)
 
-    service.handle_event_payload(_message_event(text="/neo backfill profiles"))
+    service.handle_event_payload(
+        _message_event(text="/neo pipeline run 600519 XSHG 2026-03-19")
+    )
 
     assert client.messages == [("oc_test_chat", "Permission denied for this command.")]
 
@@ -114,7 +116,7 @@ def test_async_job_is_persisted_and_notified(tmp_path) -> None:
 
     service.handle_event_payload(
         _message_event(
-            text="/neo backfill profiles --limit 1",
+            text="/neo pipeline run 600519 XSHG 2026-03-19",
             sender_open_id="ou_admin",
         )
     )
@@ -122,14 +124,14 @@ def test_async_job_is_persisted_and_notified(tmp_path) -> None:
     job = store.get_job(1)
     assert job is not None
     assert job.status.value == "succeeded"
-    assert runner.commands == ["backfill_profiles"]
+    assert runner.commands == ["pipeline_run"]
     assert client.messages[0] == (
         "oc_test_chat",
-        "Accepted job 1: backfill_profiles. Use `/neo job 1` to query status.",
+        "Accepted job 1: pipeline_run. Use `/neo job 1` to query status.",
     )
     assert client.messages[1] == (
         "oc_test_chat",
-        "Job 1 succeeded.\nBackfill complete: processed=1 fetched=1 skipped_unsupported=0 failed=0",
+        "Job 1 succeeded.\nPipeline run placeholder completed.",
     )
 
 

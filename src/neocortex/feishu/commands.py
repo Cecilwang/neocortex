@@ -13,7 +13,6 @@ HELP_TEXT = """Available commands:
 /neo bars <symbol> <exchange> <start-date> <end-date> [--adjust <value>] [--timeout <seconds>]
 /neo db table <table> [--limit <n>]
 /neo db sql <SELECT ...>
-/neo backfill profiles [--limit <n>] [--workers <n>] [--retry-count <n>] [--sleep-seconds <seconds>] [--timeout <seconds>]
 /neo job <job-id>
 /neo pipeline run <symbol> <exchange> <as-of-date>"""
 
@@ -38,8 +37,6 @@ def parse_command(text: str) -> BotCommand | None:
         return _parse_bars(stripped, tokens[2:])
     if root == "db":
         return _parse_db(stripped, tokens[2:])
-    if root == "backfill":
-        return _parse_backfill(stripped, tokens[2:])
     if root == "job":
         return _parse_job(stripped, tokens[2:])
     if root == "pipeline":
@@ -126,29 +123,6 @@ def _parse_db(text: str, tokens: list[str]) -> BotCommand:
 
     raise ValueError(
         "Usage: /neo db table <table> [--limit <n>] | /neo db sql <SELECT ...>"
-    )
-
-
-def _parse_backfill(text: str, tokens: list[str]) -> BotCommand:
-    if tokens[:1] != ["profiles"]:
-        raise ValueError(
-            "Usage: /neo backfill profiles [--limit <n>] [--workers <n>] "
-            "[--retry-count <n>] [--sleep-seconds <seconds>] [--timeout <seconds>]"
-        )
-    _, options = _split_args(tokens[1:])
-    args: dict[str, object] = {
-        "limit": _parse_optional_int(options, "limit"),
-        "workers": _parse_optional_int(options, "workers", default=8),
-        "retry_count": _parse_optional_int(options, "retry-count", default=0),
-        "sleep_seconds": _parse_optional_float(options, "sleep-seconds", default=0.0),
-        "timeout": _parse_optional_float(options, "timeout"),
-    }
-    return BotCommand(
-        name="backfill_profiles",
-        text=text,
-        args=args,
-        requires_admin=True,
-        asynchronous=True,
     )
 
 

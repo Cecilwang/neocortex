@@ -19,7 +19,6 @@ PRICE_BAR_HIGH = "high"
 PRICE_BAR_LOW = "low"
 PRICE_BAR_CLOSE = "close"
 PRICE_BAR_VOLUME = "volume"
-PRICE_BAR_ADJUSTED_CLOSE = "adjusted_close"
 
 PRICE_BAR_VALUE_COLUMNS = (
     PRICE_BAR_TIMESTAMP,
@@ -28,7 +27,6 @@ PRICE_BAR_VALUE_COLUMNS = (
     PRICE_BAR_LOW,
     PRICE_BAR_CLOSE,
     PRICE_BAR_VOLUME,
-    PRICE_BAR_ADJUSTED_CLOSE,
 )
 
 
@@ -124,7 +122,6 @@ class PriceBar:
     low: float
     close: float
     volume: float
-    adjusted_close: float | None = None
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -201,7 +198,6 @@ def _price_series_frame_from_bars(
                 PRICE_BAR_LOW: bar.low,
                 PRICE_BAR_CLOSE: bar.close,
                 PRICE_BAR_VOLUME: bar.volume,
-                PRICE_BAR_ADJUSTED_CLOSE: bar.adjusted_close,
             }
         )
     return pd.DataFrame(records, columns=PRICE_BAR_VALUE_COLUMNS)
@@ -246,7 +242,18 @@ class FundamentalSnapshot:
     period_label: str
     raw_items: JsonDict = field(default_factory=dict)
     derived_metrics: JsonDict = field(default_factory=dict)
-    source: DataProvider | None = None
+    source: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DisclosureSection:
+    """Normalized qualitative disclosure section for one filing/report date."""
+
+    security_id: SecurityId
+    report_date: date
+    section_kind: str
+    content: str
+    source: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +281,7 @@ class MacroSeriesPoint:
     frequency: str
     change_pct: float | None = None
     yoy_change_pct: float | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
