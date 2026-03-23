@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
+import neocortex.market_data_provider.source_fetcher as source_fetcher_module
 from tests.core._market_data_provider_fakes import FakeSourceConnector
 
 from neocortex.connectors.types import (
@@ -357,7 +359,16 @@ def test_read_through_provider_aggregate_error_contains_multiple_source_failures
 def test_read_through_provider_does_not_write_back_current_day_daily(
     tmp_path,
     cn_security_id: SecurityId,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            current = datetime(2026, 3, 19, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+            return current if tz is None else current.astimezone(tz)
+
+    monkeypatch.setattr(source_fetcher_module, "datetime", FrozenDateTime)
+
     store = MarketDataStore(tmp_path / "market.sqlite3")
     store.ensure_schema()
     today = date(2026, 3, 19)
@@ -381,7 +392,6 @@ def test_read_through_provider_does_not_write_back_current_day_daily(
         source_priority={
             Market.CN: {RESOURCE_DAILY_PRICE_BARS: ("baostock",)},
         },
-        today=lambda: today,
     )
 
     first = provider.get_price_bars(
@@ -426,7 +436,6 @@ def test_read_through_provider_writes_historical_daily_without_provider_cache_si
         source_priority={
             Market.CN: {RESOURCE_DAILY_PRICE_BARS: ("baostock",)},
         },
-        today=lambda: date(2026, 3, 19),
     )
 
     first = provider.get_price_bars(

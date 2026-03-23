@@ -50,7 +50,6 @@ class ReadThroughMarketDataProvider(MarketDataProvider):
         store: MarketDataStore,
         source_connectors: Mapping[str, BaseSourceConnector],
         source_priority: Mapping[Market, Mapping[str, Sequence[str]]] | None = None,
-        today: callable = date.today,
     ) -> None:
         self.store = store
         self.store.ensure_schema()
@@ -65,7 +64,6 @@ class ReadThroughMarketDataProvider(MarketDataProvider):
             }
             for market, priorities in configured_priority.items()
         }
-        self.today = today
         self._validate_source_priority()
         self.db_reader = DBRouteReader(
             store=self.store,
@@ -76,7 +74,6 @@ class ReadThroughMarketDataProvider(MarketDataProvider):
             store=self.store,
             source_connectors=self.source_connectors,
             source_priority=self.source_priority,
-            today=self.today,
         )
 
     @classmethod

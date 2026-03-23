@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 import logging
+from zoneinfo import ZoneInfo
 
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
@@ -43,13 +44,17 @@ from neocortex.storage.utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
+_MARKET_WRITE_BACK_DELAY = timedelta(minutes=30)
+_MARKET_CLOSE_TIMES = {
+    Market.US: time(16, 0),
+    Market.JP: time(15, 0),
+    Market.HK: time(16, 0),
+    Market.CN: time(15, 0),
+}
+
 
 class SourceRouteFetcher(SourceRoutedComponent):
     """Fetch per-source market data and persist write-through state."""
-
-    def __init__(self, *, today=date.today, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.today = today
 
     @route_by_source(RESOURCE_SECURITIES)
     def list_securities(
@@ -185,7 +190,10 @@ class SourceRouteFetcher(SourceRoutedComponent):
         if not fetched:
             raise KeyError(security_id)
         # 避免把未收盘数据写入DB
-        if self._should_write_back_daily(end_date=end_date):
+        if self._should_write_back_daily(
+            market=security_id.market,
+            end_date=end_date,
+        ):
             self._ensure_security_exists(security_id)
             self.store.daily_price_bars.upsert_many(
                 fetched,
@@ -277,5 +285,16 @@ class SourceRouteFetcher(SourceRoutedComponent):
             observed_at=utc_now_iso(),
         )
 
-    def _should_write_back_daily(self, *, end_date: date) -> bool:
-        return end_date < self.today()
+    def _should_write_back_daily(self, *, market: Market, end_date: date) -> bool:
+        market_now = datetime.now(ZoneInfo(get_market_context(market).timezone))
+        market_today = market_now.date()
+        if end_date < market_today:
+            return True
+        if end_date > market_today:
+            return False
+        market_close_at = datetime.combine(
+            market_today,
+            _MARKET_CLOSE_TIMES[market],
+            tzinfo=market_now.tzinfo,
+        )
+        return market_now >= market_close_at + _MARKET_WRITE_BACK_DELAY

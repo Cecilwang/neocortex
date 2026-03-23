@@ -1,12 +1,15 @@
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
+import neocortex.market_data_provider.source_fetcher as source_fetcher_module
 from tests.core._market_data_provider_fakes import FakeSourceConnector
 
-from neocortex.connectors.types import TradingDateRecord
+from neocortex.connectors.types import DailyPriceBarRecord, TradingDateRecord
 from neocortex.market_data_provider import (
     RESOURCE_COMPANY_PROFILE,
+    RESOURCE_DAILY_PRICE_BARS,
     RESOURCE_TRADING_DATES,
     SourceRouteFetcher,
     SourceRoutingError,
@@ -108,3 +111,93 @@ def test_source_route_fetcher_fetches_and_persists_trading_dates(tmp_path) -> No
         (date(2026, 3, 21), date(2026, 3, 23))
     ]
     assert len(store.dump_table("trading_dates")) == 5
+
+
+def test_source_route_fetcher_writes_back_current_day_after_market_close(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            current = datetime(2026, 3, 19, 15, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+            return current if tz is None else current.astimezone(tz)
+
+    monkeypatch.setattr(source_fetcher_module, "datetime", FrozenDateTime)
+
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    security_id = SecurityId(symbol="688981", market=Market.CN, exchange=Exchange.XSHG)
+    connector = FakeSourceConnector(
+        daily_records=(
+            DailyPriceBarRecord(
+                source="fake",
+                security_id=security_id,
+                trade_date="2026-03-19",
+                open=10.0,
+                high=11.0,
+                low=9.0,
+                close=10.5,
+                volume=100.0,
+            ),
+        ),
+    )
+    fetcher = SourceRouteFetcher(
+        store=store,
+        source_connectors={"fake": connector},
+        source_priority={Market.CN: {RESOURCE_DAILY_PRICE_BARS: ("fake",)}},
+    )
+
+    fetched = fetcher.get_raw_daily_records(
+        security_id=security_id,
+        start_date=date(2026, 3, 19),
+        end_date=date(2026, 3, 19),
+    )
+
+    assert len(fetched) == 1
+    assert len(store.dump_table("daily_price_bars")) == 1
+
+
+def test_source_route_fetcher_does_not_write_back_current_day_before_market_close_in_market_timezone(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            current = datetime(2026, 3, 20, 4, 30, tzinfo=ZoneInfo("Asia/Tokyo"))
+            return current if tz is None else current.astimezone(tz)
+
+    monkeypatch.setattr(source_fetcher_module, "datetime", FrozenDateTime)
+
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    security_id = SecurityId(symbol="AAPL", market=Market.US, exchange=Exchange.XNAS)
+    connector = FakeSourceConnector(
+        daily_records=(
+            DailyPriceBarRecord(
+                source="fake",
+                security_id=security_id,
+                trade_date="2026-03-19",
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.5,
+                volume=100.0,
+            ),
+        ),
+    )
+    fetcher = SourceRouteFetcher(
+        store=store,
+        source_connectors={"fake": connector},
+        source_priority={Market.US: {RESOURCE_DAILY_PRICE_BARS: ("fake",)}},
+    )
+
+    fetched = fetcher.get_raw_daily_records(
+        security_id=security_id,
+        start_date=date(2026, 3, 19),
+        end_date=date(2026, 3, 19),
+    )
+
+    assert len(fetched) == 1
+    assert store.dump_table("daily_price_bars") == []
