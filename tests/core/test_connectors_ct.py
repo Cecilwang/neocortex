@@ -1,10 +1,12 @@
 import sqlite3
+from datetime import date
 
 import pytest
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
     FundamentalSnapshotRecord,
     SecurityListing,
+    TradingDateRecord,
 )
 from neocortex.markets import get_market_context
 from neocortex.models import (
@@ -51,6 +53,7 @@ def test_market_data_store_creates_single_table_schema(tmp_path) -> None:
         "securities",
         "security_aliases",
         "security_profiles",
+        "trading_dates",
     }.issubset(table_names)
 
 
@@ -228,6 +231,164 @@ def test_daily_price_bar_repository_aggregates_weekly_and_monthly(tmp_path) -> N
             amount=2200.0,
         ),
     )
+
+
+def test_trading_date_repository_round_trips_records(tmp_path) -> None:
+    db_path = tmp_path / "market.sqlite3"
+    store = MarketDataStore(db_path)
+    store.ensure_schema()
+    records = (
+        TradingDateRecord(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date="2026-03-20",
+            is_trading_day=True,
+        ),
+        TradingDateRecord(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date="2026-03-21",
+            is_trading_day=False,
+        ),
+    )
+
+    store.trading_dates.upsert_many(records, fetched_at="2026-03-23T00:00:00Z")
+
+    loaded = store.trading_dates.get_range(
+        source="baostock",
+        market=Market.CN,
+        calendar="XSHG",
+        start_date=date.fromisoformat("2026-03-20"),
+        end_date=date.fromisoformat("2026-03-21"),
+    )
+
+    assert loaded == records
+
+
+def test_trading_date_repository_rejects_non_contiguous_batch(tmp_path) -> None:
+    db_path = tmp_path / "market.sqlite3"
+    store = MarketDataStore(db_path)
+    store.ensure_schema()
+
+    with pytest.raises(ValueError):
+        store.trading_dates.upsert_many(
+            (
+                TradingDateRecord(
+                    source="baostock",
+                    market=Market.CN,
+                    calendar="XSHG",
+                    trade_date="2026-03-20",
+                    is_trading_day=True,
+                ),
+                TradingDateRecord(
+                    source="baostock",
+                    market=Market.CN,
+                    calendar="XSHG",
+                    trade_date="2026-03-22",
+                    is_trading_day=False,
+                ),
+            ),
+            fetched_at="2026-03-23T00:00:00Z",
+        )
+
+
+def test_trading_date_repository_rejects_disconnected_incremental_upsert(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "market.sqlite3"
+    store = MarketDataStore(db_path)
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-21",
+                is_trading_day=False,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+
+    with pytest.raises(ValueError):
+        store.trading_dates.upsert_many(
+            (
+                TradingDateRecord(
+                    source="baostock",
+                    market=Market.CN,
+                    calendar="XSHG",
+                    trade_date="2026-03-24",
+                    is_trading_day=True,
+                ),
+            ),
+            fetched_at="2026-03-24T00:00:00Z",
+        )
+
+
+def test_trading_date_repository_returns_next_and_previous_trading_dates(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "market.sqlite3"
+    store = MarketDataStore(db_path)
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-01-04",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-01-05",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-01-06",
+                is_trading_day=True,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+
+    assert store.trading_dates.next_trading_date(
+        source="baostock",
+        market=Market.CN,
+        calendar="XSHG",
+        trade_date=date(2026, 1, 4),
+    ) == date(2026, 1, 5)
+    assert (
+        store.trading_dates.previous_trading_date(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date=date(2026, 1, 4),
+        )
+        is None
+    )
+    assert store.trading_dates.previous_trading_date(
+        source="baostock",
+        market=Market.CN,
+        calendar="XSHG",
+        trade_date=date(2026, 1, 6),
+    ) == date(2026, 1, 6)
 
 
 def test_fundamental_snapshots_accept_non_enumerated_statement_kind(tmp_path) -> None:

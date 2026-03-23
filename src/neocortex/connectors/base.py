@@ -14,6 +14,7 @@ from neocortex.connectors.types import (
     MacroPointRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.models.core import SecurityId
 from neocortex.models.core import Market
@@ -118,6 +119,16 @@ class BaseSourceConnector:
         as_of_date: date,
     ) -> tuple[MacroPointRecord, ...]:
         _ = market, as_of_date
+        raise NotImplementedError
+
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        _ = market, start_date, end_date
         raise NotImplementedError
 
     def _market_store(self):

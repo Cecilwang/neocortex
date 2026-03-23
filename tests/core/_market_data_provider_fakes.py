@@ -9,6 +9,7 @@ from neocortex.connectors.types import (
     FundamentalSnapshotRecord,
     MacroPointRecord,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import (
@@ -34,12 +35,15 @@ class InMemoryMarketDataProvider(MarketDataProvider):
         | None = None,
         disclosures: Mapping[SecurityId, tuple[DisclosureSection, ...]] | None = None,
         macro_points: Mapping[Market, tuple[MacroSeriesPoint, ...]] | None = None,
+        trading_dates: Mapping[Market, tuple[TradingDateRecord, ...]] | None = None,
     ) -> None:
         self.company_profiles = dict(company_profiles or {})
         self.price_bars = dict(price_bars or {})
         self.fundamentals = dict(fundamentals or {})
         self.disclosures = dict(disclosures or {})
         self.macro_points = dict(macro_points or {})
+        self.trading_dates = dict(trading_dates or {})
+        self.last_bars_call: tuple[SecurityId, date, date, str | None] | None = None
 
     def list_securities(self, *, market: Market) -> tuple[SecurityId, ...]:
         return tuple(
@@ -64,11 +68,11 @@ class InMemoryMarketDataProvider(MarketDataProvider):
             raise ValueError(
                 f"InMemoryMarketDataProvider currently supports only the {DAILY_BAR_INTERVAL} interval."
             )
-        if adjust:
+        if adjust not in (None, "qfq"):
             raise ValueError(
-                "InMemoryMarketDataProvider does not support adjusted price series."
+                "InMemoryMarketDataProvider supports only raw or qfq price series."
             )
-
+        self.last_bars_call = (security_id, start_date, end_date, adjust)
         series = self.price_bars[security_id]
         mask = series.bars[PRICE_BAR_TIMESTAMP].dt.date.between(start_date, end_date)
         return PriceSeries(security_id=security_id, data=series.bars.loc[mask])
@@ -100,6 +104,21 @@ class InMemoryMarketDataProvider(MarketDataProvider):
         _ = as_of_date
         return self.macro_points.get(market, ())
 
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        return tuple(
+            trading_date_record
+            for trading_date_record in self.trading_dates.get(market, ())
+            if start_date
+            <= date.fromisoformat(trading_date_record.trade_date)
+            <= end_date
+        )
+
 
 class FakeSourceConnector(BaseSourceConnector):
     source_name = "fake"
@@ -115,9 +134,11 @@ class FakeSourceConnector(BaseSourceConnector):
         fundamental_records: tuple[FundamentalSnapshotRecord, ...] = (),
         disclosure_records: tuple[DisclosureSectionRecord, ...] = (),
         macro_records: tuple[MacroPointRecord, ...] = (),
+        trading_date_records: tuple[TradingDateRecord, ...] = (),
         profile_error: Exception | None = None,
         factor_error: Exception | None = None,
         adjusted_daily_error: Exception | None = None,
+        trading_dates_error: Exception | None = None,
         supports_adjustment_factors: bool = True,
         supports_adjusted_daily_bars: bool = True,
     ) -> None:
@@ -130,9 +151,11 @@ class FakeSourceConnector(BaseSourceConnector):
         self.fundamental_records = fundamental_records
         self.disclosure_records = disclosure_records
         self.macro_records = macro_records
+        self.trading_date_records = trading_date_records
         self.profile_error = profile_error
         self.factor_error = factor_error
         self.adjusted_daily_error = adjusted_daily_error
+        self.trading_dates_error = trading_dates_error
         self.supports_adjustment_factors = supports_adjustment_factors
         self.supports_adjusted_daily_bars = supports_adjusted_daily_bars
         self.profile_calls = 0
@@ -140,6 +163,8 @@ class FakeSourceConnector(BaseSourceConnector):
         self.factor_calls = 0
         self.adjusted_daily_calls = 0
         self.apply_adjustment_calls = 0
+        self.trading_dates_calls = 0
+        self.trading_date_request_ranges: list[tuple[date, date]] = []
         self.last_adjusted_raw_daily_records: tuple[DailyPriceBarRecord, ...] | None = (
             None
         )
@@ -270,3 +295,22 @@ class FakeSourceConnector(BaseSourceConnector):
         if not self.macro_records:
             raise KeyError(market)
         return self.macro_records
+
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        self.trading_dates_calls += 1
+        self.trading_date_request_ranges.append((start_date, end_date))
+        if self.trading_dates_error is not None:
+            raise self.trading_dates_error
+        if not self.trading_date_records:
+            raise KeyError(market)
+        return tuple(
+            record
+            for record in self.trading_date_records
+            if start_date <= date.fromisoformat(record.trade_date) <= end_date
+        )

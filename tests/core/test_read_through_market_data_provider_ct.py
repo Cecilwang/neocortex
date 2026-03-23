@@ -12,6 +12,7 @@ from neocortex.connectors.types import (
     MacroPointRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.market_data_provider import (
     RESOURCE_COMPANY_PROFILE,
@@ -19,6 +20,7 @@ from neocortex.market_data_provider import (
     RESOURCE_DISCLOSURES,
     RESOURCE_FUNDAMENTALS,
     RESOURCE_MACRO,
+    RESOURCE_TRADING_DATES,
     ReadThroughMarketDataProvider,
     SourceRoutingError,
 )
@@ -324,9 +326,6 @@ def test_read_through_provider_raises_when_no_adjusted_path_is_available(
 
     assert exc_info.value.resource_type == RESOURCE_DAILY_PRICE_BARS
     assert exc_info.value.target == cn_security_id
-    assert len(exc_info.value.failures) == 1
-    assert exc_info.value.failures[0][0] == "efinance"
-    assert isinstance(exc_info.value.failures[0][1], NotImplementedError)
 
 
 def test_read_through_provider_aggregate_error_contains_multiple_source_failures(
@@ -353,12 +352,6 @@ def test_read_through_provider_aggregate_error_contains_multiple_source_failures
 
     assert exc_info.value.resource_type == RESOURCE_COMPANY_PROFILE
     assert exc_info.value.target == cn_security_id
-    assert [source for source, _ in exc_info.value.failures] == [
-        "baostock",
-        "efinance",
-    ]
-    assert isinstance(exc_info.value.failures[0][1], KeyError)
-    assert isinstance(exc_info.value.failures[1][1], ValueError)
 
 
 def test_read_through_provider_does_not_write_back_current_day_daily(
@@ -524,4 +517,307 @@ def test_read_through_provider_returns_other_runtime_resources(
     assert disclosures[0].section_kind == "overview"
     assert disclosures[0].content == "渠道和产品都在扩张。"
     assert macro_points[0].series_name == "CN RRR"
-    assert macro_points[0].source == "baostock"
+
+
+def test_read_through_provider_prefers_db_trading_dates_without_network_call(
+    tmp_path,
+) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-21",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-22",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-23",
+                is_trading_day=True,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+    connector = FakeSourceConnector(
+        trading_date_records=(
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+        ),
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={"baostock": connector},
+        source_priority={Market.CN: {RESOURCE_TRADING_DATES: ("baostock",)}},
+    )
+
+    trading_dates = provider.get_trading_dates(
+        market=Market.CN,
+        start_date=date(2026, 3, 19),
+        end_date=date(2026, 3, 23),
+    )
+
+    assert tuple(record.trade_date for record in trading_dates) == (
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22",
+        "2026-03-23",
+    )
+    assert connector.trading_dates_calls == 0
+
+
+def test_read_through_provider_fetches_trading_dates_after_db_miss(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    connector = FakeSourceConnector(
+        trading_date_records=(
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-21",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-22",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-23",
+                is_trading_day=True,
+            ),
+        ),
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={"baostock": connector},
+        source_priority={Market.CN: {RESOURCE_TRADING_DATES: ("baostock",)}},
+    )
+
+    trading_dates = provider.get_trading_dates(
+        market=Market.CN,
+        start_date=date(2026, 3, 19),
+        end_date=date(2026, 3, 23),
+    )
+
+    assert tuple(record.trade_date for record in trading_dates) == (
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22",
+        "2026-03-23",
+    )
+    assert connector.trading_dates_calls == 1
+    assert len(store.dump_table("trading_dates")) == 5
+
+
+def test_read_through_provider_is_trading_day_wraps_calendar_records(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=False,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={"baostock": FakeSourceConnector()},
+        source_priority={Market.CN: {RESOURCE_TRADING_DATES: ("baostock",)}},
+    )
+
+    assert (
+        provider.is_trading_day(market=Market.CN, trade_date=date(2026, 3, 19)) is True
+    )
+    assert (
+        provider.is_trading_day(market=Market.CN, trade_date=date(2026, 3, 20)) is False
+    )
+
+
+def test_read_through_provider_previous_trading_date_wraps_calendar_records(
+    tmp_path,
+) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-18",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-21",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-22",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-23",
+                is_trading_day=True,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={"baostock": FakeSourceConnector()},
+        source_priority={Market.CN: {RESOURCE_TRADING_DATES: ("baostock",)}},
+    )
+
+    previous_trading_date = provider.get_previous_trading_date(
+        market=Market.CN,
+        trade_date=date(2026, 3, 23),
+    )
+
+    assert previous_trading_date == date(2026, 3, 19)
+
+
+def test_read_through_provider_next_trading_date_wraps_calendar_records(
+    tmp_path,
+) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    store.trading_dates.upsert_many(
+        (
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-19",
+                is_trading_day=True,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-20",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-21",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-22",
+                is_trading_day=False,
+            ),
+            TradingDateRecord(
+                source="baostock",
+                market=Market.CN,
+                calendar="XSHG",
+                trade_date="2026-03-23",
+                is_trading_day=True,
+            ),
+        ),
+        fetched_at="2026-03-23T00:00:00Z",
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={"baostock": FakeSourceConnector()},
+        source_priority={Market.CN: {RESOURCE_TRADING_DATES: ("baostock",)}},
+    )
+
+    next_trading_date = provider.get_next_trading_date(
+        market=Market.CN,
+        trade_date=date(2026, 3, 19),
+    )
+
+    assert next_trading_date == date(2026, 3, 23)

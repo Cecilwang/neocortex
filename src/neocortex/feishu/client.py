@@ -31,12 +31,12 @@ class FeishuClient:
         )
         self._tenant_access_token: str | None = None
         self._token_deadline: float = 0.0
-        logger.info("Initialized FeishuClient: base_url=%s", settings.base_url)
+        logger.info(f"Initialized FeishuClient: base_url={settings.base_url}")
 
     def send_text(self, *, chat_id: str, text: str) -> None:
         """Send one text message into the target chat."""
 
-        logger.info("Calling Feishu send_message API for chat_id=%s", chat_id)
+        logger.info(f"Calling Feishu send_message API for chat_id={chat_id}")
         payload = {
             "receive_id": chat_id,
             "msg_type": "text",
@@ -59,11 +59,8 @@ class FeishuClient:
         json: dict[str, object] | None = None,
     ) -> dict[str, object]:
         logger.info(
-            "Calling Feishu API: method=%s path=%s has_params=%s has_json=%s",
-            method,
-            path,
-            params is not None,
-            json is not None,
+            f"Calling Feishu API: method={method} path={path} "
+            f"has_params={params is not None} has_json={json is not None}"
         )
         headers = {"Authorization": f"Bearer {self._get_tenant_access_token()}"}
         response = self.http_client.request(
@@ -77,7 +74,7 @@ class FeishuClient:
         document = response.json()
         if document.get("code") not in (None, 0):
             raise RuntimeError(f"Feishu API request failed: {document}")
-        logger.debug("Feishu API request succeeded: path=%s", path)
+        logger.debug(f"Feishu API request succeeded: path={path}")
         return document
 
     def _get_tenant_access_token(self) -> str:
@@ -103,5 +100,5 @@ class FeishuClient:
         expire = int(document.get("expire", 7200))
         self._tenant_access_token = token
         self._token_deadline = now + max(expire - _TOKEN_REFRESH_BUFFER_SECONDS, 1)
-        logger.info("Refreshed Feishu tenant access token: expires_in=%s", expire)
+        logger.info(f"Refreshed Feishu tenant access token: expires_in={expire}")
         return token

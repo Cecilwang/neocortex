@@ -42,7 +42,7 @@ class Pipeline:
 
     def __post_init__(self) -> None:
         self.agents = self._load_agents()
-        logger.info("Pipeline initialized with %s agents.", len(self.agents))
+        logger.info(f"Pipeline initialized with {len(self.agents)} agents.")
 
     def get_agent(self, role: AgentRole) -> Agent:
         """Return one already-constructed agent from the pipeline."""
@@ -61,10 +61,8 @@ class Pipeline:
             raise RuntimeError("Pipeline requires a transport to run agents.")
 
         logger.info(
-            "Pipeline run started: security=%s as_of_date=%s request_id=%s",
-            security_id.ticker,
-            as_of_date,
-            request_id,
+            f"Pipeline run started: security={security_id.ticker} "
+            f"as_of_date={as_of_date} request_id={request_id}"
         )
         trace_by_role: dict[AgentRole, AgentExecutionTrace] = {}
         self.run_agent(
@@ -76,10 +74,8 @@ class Pipeline:
             trace_by_role=trace_by_role,
         )
         logger.info(
-            "Pipeline run finished: security=%s request_id=%s traces=%s",
-            security_id.ticker,
-            request_id,
-            len(trace_by_role),
+            f"Pipeline run finished: security={security_id.ticker} "
+            f"request_id={request_id} traces={len(trace_by_role)}"
         )
         return trace_by_role
 
@@ -96,14 +92,13 @@ class Pipeline:
         if self.transport is None:
             raise RuntimeError("Pipeline requires a transport to run agents.")
         if role in trace_by_role:
-            logger.debug("Pipeline cache hit for agent role=%s.", role.value)
+            logger.debug(f"Pipeline cache hit for agent role={role.value}.")
             return trace_by_role[role]
 
         agent = self.get_agent(role)
         logger.info(
-            "Pipeline running agent role=%s dependencies=%s",
-            role.value,
-            [dependency.value for dependency in agent.dependencies],
+            f"Pipeline running agent role={role.value} "
+            f"dependencies={[dependency.value for dependency in agent.dependencies]}"
         )
         for dependency in agent.dependencies:
             self.run_agent(
@@ -125,9 +120,8 @@ class Pipeline:
         )
         trace_by_role[role] = trace
         logger.info(
-            "Pipeline completed agent role=%s status=%s",
-            role.value,
-            trace.response_validation_status.value,
+            f"Pipeline completed agent role={role.value} "
+            f"status={trace.response_validation_status.value}"
         )
         return trace
 
@@ -138,7 +132,7 @@ class Pipeline:
             for role in AgentRole
         }
         logger.debug(
-            "Loaded pipeline agent configs for roles=%s", [r.value for r in agents]
+            f"Loaded pipeline agent configs for roles={[r.value for r in agents]}"
         )
         return agents
 

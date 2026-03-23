@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+import logging
 from typing import TypeVar
 
 import pandas as pd
@@ -11,6 +12,7 @@ from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
 
 ParamsT = TypeVar("ParamsT", bound="IndicatorParams")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,3 +67,14 @@ class Indicator:
     @property
     def timestamp(self) -> pd.Series:
         return self.data[PRICE_BAR_TIMESTAMP]
+
+
+def log_indicator_calculation(
+    *,
+    indicator_key: str,
+    bars: PriceSeries,
+    parameters: object | None,
+) -> None:
+    logger.info(
+        f"Calculating {indicator_key} security={bars.security_id.ticker} start={bars.start_timestamp} end={bars.end_timestamp} parameters={parameters}"
+    )

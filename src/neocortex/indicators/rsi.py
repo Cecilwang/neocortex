@@ -8,6 +8,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 import pandas as pd
@@ -52,6 +53,11 @@ class RSIIndicator(IndicatorSpec):
         parameters: RSIParams | dict[str, object] | None = None,
     ) -> RSI:
         resolved_parameters = _coerce_params(parameters)
+        log_indicator_calculation(
+            indicator_key=self.key,
+            bars=bars,
+            parameters=resolved_parameters,
+        )
         period = resolved_parameters.period
         closes = bars.closes
         if closes.empty:

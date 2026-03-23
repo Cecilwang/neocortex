@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from neocortex.indicators.core import Indicator, IndicatorSpec
 from neocortex.indicators.ema import ema
 from neocortex.indicators.kdj import kdj
@@ -10,6 +12,9 @@ from neocortex.indicators.roc import roc
 from neocortex.indicators.rsi import rsi
 from neocortex.indicators.sma import sma
 from neocortex.models.core import PriceSeries
+
+
+logger = logging.getLogger(__name__)
 
 
 _INDICATORS: dict[str, IndicatorSpec] = {
@@ -42,5 +47,14 @@ def calculate_indicator(
 ) -> Indicator:
     """Calculate one indicator series over normalized price bars."""
 
+    logger.debug(
+        f"Calculating indicator from registry: indicator={key} "
+        f"security={bars.security_id.ticker} bar_count={len(bars)} parameters={parameters}"
+    )
     indicator = get_indicator_spec(key)
-    return indicator.calculate(bars, parameters=parameters)
+    result = indicator.calculate(bars, parameters=parameters)
+    logger.debug(
+        f"Calculated indicator from registry: indicator={key} "
+        f"security={bars.security_id.ticker} row_count={len(result.data)}"
+    )
+    return result

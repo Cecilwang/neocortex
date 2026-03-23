@@ -296,3 +296,35 @@ class MacroPointRow(MarketDataBase):
     change_pct: Mapped[float | None] = mapped_column(nullable=True)
     yoy_change_pct: Mapped[float | None] = mapped_column(nullable=True)
     fetched_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class TradingDateRow(MarketDataBase):
+    """Source-specific market trading-date calendar rows."""
+
+    __tablename__ = "trading_dates"
+    __table_args__ = (
+        CheckConstraint("length(trim(source)) > 0", name="ck_trading_dates_source"),
+        CheckConstraint("length(trim(market)) > 0", name="ck_trading_dates_market"),
+        CheckConstraint(
+            "length(trim(calendar)) > 0",
+            name="ck_trading_dates_calendar",
+        ),
+        CheckConstraint(
+            "is_trading_day IN (0, 1)",
+            name="ck_trading_dates_is_trading_day",
+        ),
+        Index(
+            "idx_trading_dates_market_calendar_date",
+            "market",
+            "calendar",
+            "trade_date",
+        ),
+        Index("idx_trading_dates_market_date", "market", "trade_date"),
+    )
+
+    source: Mapped[str] = mapped_column(String, primary_key=True)
+    market: Mapped[str] = mapped_column(String, primary_key=True)
+    calendar: Mapped[str] = mapped_column(String, primary_key=True)
+    trade_date: Mapped[str] = mapped_column(String, primary_key=True)
+    is_trading_day: Mapped[int] = mapped_column(nullable=False)
+    fetched_at: Mapped[str] = mapped_column(String, nullable=False)

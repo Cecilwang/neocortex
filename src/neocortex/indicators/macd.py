@@ -9,6 +9,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    log_indicator_calculation,
 )
 from neocortex.indicators.ema import calculate_ema_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
@@ -56,6 +57,11 @@ class MACDIndicator(IndicatorSpec):
         parameters: MACDParams | dict[str, object] | None = None,
     ) -> MACD:
         resolved_parameters = _coerce_params(parameters)
+        log_indicator_calculation(
+            indicator_key=self.key,
+            bars=bars,
+            parameters=resolved_parameters,
+        )
         closes = bars.closes
         if closes.empty:
             frame = pd.DataFrame(

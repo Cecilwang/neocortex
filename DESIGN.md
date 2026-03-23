@@ -167,22 +167,22 @@ Inference configuration policy:
 
 The planned workflow follows the paper's hierarchical design:
 
-1. `technical_agent`
-2. `quant_fundamental_agent`
-3. `qualitative_fundamental_agent`
-4. `news_agent`
-5. `sector_agent`
-6. `macro_agent`
-7. `pm_agent`
+1. `technical`
+2. `quant_fundamental`
+3. `qualitative_fundamental`
+4. `news`
+5. `sector`
+6. `macro`
+7. `pm`
 
 Execution graph:
 
 ```text
-technical_agent -------------------|
-quant_fundamental_agent ---------- |
-qualitative_fundamental_agent ---- |--> sector_agent --|
-news_agent ------------------------|                  |
-macro_agent ------------------------------------------|--> pm_agent
+technical -------------------------|
+quant_fundamental ---------------- |
+qualitative_fundamental ---------- |--> sector --|
+news ------------------------------|             |
+macro -------------------------------------------|--> pm
 ```
 
 ## Step 1 Decisions

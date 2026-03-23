@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import logging
 
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
+from neocortex.markets import get_market_context
 from neocortex.market_data_provider.base import (
     RESOURCE_COMPANY_PROFILE,
     RESOURCE_DAILY_PRICE_BARS,
@@ -17,6 +19,7 @@ from neocortex.market_data_provider.base import (
     RESOURCE_FUNDAMENTALS,
     RESOURCE_MACRO,
     RESOURCE_SECURITIES,
+    RESOURCE_TRADING_DATES,
     company_profile_from_snapshot,
     disclosure_from_record,
     fundamental_snapshot_from_record,
@@ -25,7 +28,7 @@ from neocortex.market_data_provider.base import (
 )
 from neocortex.market_data_provider.routing import (
     SourceRoutedComponent,
-    route_fetch_by_source,
+    route_by_source,
 )
 from neocortex.models import (
     CompanyProfile,
@@ -48,7 +51,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         super().__init__(**kwargs)
         self.today = today
 
-    @route_fetch_by_source(resource_type=RESOURCE_SECURITIES)
+    @route_by_source(RESOURCE_SECURITIES)
     def list_securities(
         self,
         *,
@@ -63,7 +66,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
             self.store.seed_security_listing(listing, source=source_name)
         return tuple(listing.security_id for listing in listings)
 
-    @route_fetch_by_source(resource_type=RESOURCE_COMPANY_PROFILE)
+    @route_by_source(RESOURCE_COMPANY_PROFILE)
     def get_company_profile(
         self,
         *,
@@ -76,7 +79,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         self._store_profile_snapshot(snapshot)
         return company_profile_from_snapshot(snapshot)
 
-    @route_fetch_by_source(resource_type=RESOURCE_FUNDAMENTALS)
+    @route_by_source(RESOURCE_FUNDAMENTALS)
     def get_fundamental_snapshots(
         self,
         *,
@@ -98,7 +101,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         )
         return tuple(fundamental_snapshot_from_record(record) for record in fetched)
 
-    @route_fetch_by_source(resource_type=RESOURCE_DISCLOSURES)
+    @route_by_source(RESOURCE_DISCLOSURES)
     def get_disclosure_sections(
         self,
         *,
@@ -120,7 +123,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         )
         return tuple(disclosure_from_record(record) for record in fetched)
 
-    @route_fetch_by_source(resource_type=RESOURCE_MACRO)
+    @route_by_source(RESOURCE_MACRO)
     def get_macro_points(
         self,
         *,
@@ -135,73 +138,37 @@ class SourceRouteFetcher(SourceRoutedComponent):
         self.store.macro_points.upsert_many(fetched, fetched_at=utc_now_iso())
         return tuple(macro_point_from_record(record, market) for record in fetched)
 
-    @route_fetch_by_source(resource_type=RESOURCE_DAILY_PRICE_BARS)
+    @route_by_source(RESOURCE_DAILY_PRICE_BARS)
+    def get_raw_daily_records(
+        self,
+        *,
+        security_id: SecurityId,
+        start_date: date,
+        end_date: date,
+        source_name: str,
+    ) -> tuple[DailyPriceBarRecord, ...]:
+        return self.get_raw_daily_records_for_source(
+            source_name=source_name,
+            security_id=security_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
     def get_raw_daily_price_bars(
         self,
         *,
         security_id: SecurityId,
         start_date: date,
         end_date: date,
-        source_name: str,
     ) -> PriceSeries:
-        records = self._fetch_raw_daily_records_for_source(
-            source_name=source_name,
+        records = self.get_raw_daily_records(
             security_id=security_id,
             start_date=start_date,
             end_date=end_date,
         )
         return price_series_from_daily_records(security_id, records)
 
-    @route_fetch_by_source(resource_type=RESOURCE_DAILY_PRICE_BARS)
-    def get_adjusted_daily_price_bars(
-        self,
-        *,
-        security_id: SecurityId,
-        start_date: date,
-        end_date: date,
-        adjust: str,
-        source_name: str,
-    ) -> PriceSeries:
-        connector = self._source_connector(source_name)
-        if connector.supports_adjustment_factors:
-            raw_daily_records = self._fetch_raw_daily_records_for_source(
-                source_name=source_name,
-                security_id=security_id,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            try:
-                adjusted_records = connector.apply_adjustment(
-                    security_id,
-                    adjustment_type=adjust,
-                    raw_daily_records=raw_daily_records,
-                )
-                return price_series_from_daily_records(security_id, adjusted_records)
-            except Exception:
-                if not connector.supports_adjusted_daily_bars:
-                    raise
-                logger.info(
-                    "Adjustment-factor path failed; falling back to direct adjusted daily fetch: source=%s security=%s adjust=%s",
-                    source_name,
-                    security_id.ticker,
-                    adjust,
-                    exc_info=True,
-                )
-
-        if connector.supports_adjusted_daily_bars:
-            adjusted_records = connector.get_adjusted_daily_price_bars(
-                security_id,
-                start_date=start_date,
-                end_date=end_date,
-                adjustment_type=adjust,
-            )
-            return price_series_from_daily_records(security_id, adjusted_records)
-
-        raise NotImplementedError(
-            f"{source_name} does not support adjusted daily bars."
-        )
-
-    def _fetch_raw_daily_records_for_source(
+    def get_raw_daily_records_for_source(
         self,
         *,
         source_name: str,
@@ -225,12 +192,72 @@ class SourceRouteFetcher(SourceRoutedComponent):
                 fetched_at=utc_now_iso(),
             )
             logger.info(
-                "Raw daily write-back complete: source=%s security=%s count=%s",
-                source_name,
-                security_id.ticker,
-                len(fetched),
+                f"Raw daily write-back complete: source={source_name} "
+                f"security={security_id.ticker} count={len(fetched)}"
             )
         return fetched
+
+    @route_by_source(RESOURCE_TRADING_DATES)
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+        source_name: str,
+    ) -> tuple[TradingDateRecord, ...]:
+        connector = self._source_connector(source_name)
+        calendar = get_market_context(market).trading_calendar.value
+        bounds = self.store.trading_dates.get_bounds(
+            source=source_name,
+            market=market,
+            calendar=calendar,
+        )
+        logger.info(
+            f"Preparing trading-date fetch: source={source_name} market={market.value} "
+            f"calendar={calendar} start={start_date} end={end_date} bounds={bounds}"
+        )
+        fetch_ranges: list[tuple[date, date]] = []
+        if bounds is None:
+            fetch_ranges.append((start_date, end_date))
+        else:
+            existing_start, existing_end = bounds
+            if start_date < existing_start:
+                fetch_ranges.append((start_date, existing_start - timedelta(days=1)))
+            if end_date > existing_end:
+                fetch_ranges.append((existing_end + timedelta(days=1), end_date))
+        for fetch_start_date, fetch_end_date in fetch_ranges:
+            if fetch_start_date > fetch_end_date:
+                continue
+            fetched = connector.get_trading_dates(
+                market=market,
+                start_date=fetch_start_date,
+                end_date=fetch_end_date,
+            )
+            if not fetched:
+                raise KeyError(market)
+            self.store.trading_dates.upsert_many(fetched, fetched_at=utc_now_iso())
+        if not self.store.trading_dates.covers_range(
+            source=source_name,
+            market=market,
+            calendar=calendar,
+            start_date=start_date,
+            end_date=end_date,
+        ):
+            raise KeyError(market)
+        trading_date_records = self.store.trading_dates.get_range(
+            source=source_name,
+            market=market,
+            calendar=calendar,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        logger.info(
+            f"Trading dates fetch complete: source={source_name} market={market.value} "
+            f"calendar={calendar} "
+            f"start={start_date} end={end_date} count={len(trading_date_records)}"
+        )
+        return trading_date_records
 
     def _store_profile_snapshot(self, snapshot: SecurityProfileSnapshot) -> None:
         fetched_at = utc_now_iso()

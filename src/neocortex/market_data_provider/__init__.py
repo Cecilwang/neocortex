@@ -8,6 +8,7 @@ from neocortex.market_data_provider.base import (
     RESOURCE_FUNDAMENTALS,
     RESOURCE_MACRO,
     RESOURCE_SECURITIES,
+    RESOURCE_TRADING_DATES,
 )
 from neocortex.market_data_provider.db_reader import DBRouteReader
 from neocortex.market_data_provider.read_through import (
@@ -26,6 +27,7 @@ __all__ = [
     "RESOURCE_FUNDAMENTALS",
     "RESOURCE_MACRO",
     "RESOURCE_SECURITIES",
+    "RESOURCE_TRADING_DATES",
     "SourceRouteFetcher",
     "SourceRoutingError",
 ]

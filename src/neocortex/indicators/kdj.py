@@ -10,6 +10,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    log_indicator_calculation,
 )
 from neocortex.models.core import (
     PRICE_BAR_CLOSE,
@@ -53,6 +54,11 @@ class KDJIndicator(IndicatorSpec):
         parameters: KDJParams | dict[str, object] | None = None,
     ) -> KDJ:
         resolved_parameters = _coerce_params(parameters)
+        log_indicator_calculation(
+            indicator_key=self.key,
+            bars=bars,
+            parameters=resolved_parameters,
+        )
         if bars.bars.empty:
             frame = pd.DataFrame(
                 {

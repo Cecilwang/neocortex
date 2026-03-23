@@ -42,10 +42,8 @@ class FeishuBotService:
         )
         self.executor = executor or ThreadPoolExecutor(max_workers=settings.job_workers)
         logger.info(
-            "Feishu bot service ready: db_path=%s admins=%s workers=%s",
-            settings.db_path,
-            len(settings.admin_open_ids),
-            settings.job_workers,
+            f"Feishu bot service ready: db_path={settings.db_path} "
+            f"admins={len(settings.admin_open_ids)} workers={settings.job_workers}"
         )
 
     def handle_event_payload(self, payload: dict[str, Any]) -> None:
@@ -57,45 +55,38 @@ class FeishuBotService:
             return
 
         logger.info(
-            "Received Feishu message: event_id=%s chat_id=%s sender=%s text=%r",
-            event.event_id,
-            event.chat_id,
-            event.sender_open_id,
-            event.text,
+            f"Received Feishu message: event_id={event.event_id} chat_id={event.chat_id} "
+            f"sender={event.sender_open_id} text={event.text!r}"
         )
         if not self.store.record_event(
             event_id=event.event_id, message_id=event.message_id
         ):
-            logger.info("Skipping duplicate Feishu event %s.", event.event_id)
+            logger.info(f"Skipping duplicate Feishu event {event.event_id}.")
             return
 
         try:
             command = parse_command(event.text)
         except ValueError as exc:
-            logger.warning("Invalid bot command from event %s: %s", event.event_id, exc)
+            logger.warning(f"Invalid bot command from event {event.event_id}: {exc}")
             self._send_reply(event.chat_id, f"Invalid command.\n\n{exc}")
             return
 
         if command is None:
-            logger.info("Ignoring non-command message %s.", event.message_id)
+            logger.info(f"Ignoring non-command message {event.message_id}.")
             return
         if (
             command.requires_admin
             and event.sender_open_id not in self.settings.admin_open_ids
         ):
             logger.warning(
-                "Rejected admin command=%s from sender=%s",
-                command.name,
-                event.sender_open_id,
+                f"Rejected admin command={command.name} from sender={event.sender_open_id}"
             )
             self._send_reply(event.chat_id, "Permission denied for this command.")
             return
 
         logger.info(
-            "Dispatching command=%s async=%s sender=%s",
-            command.name,
-            command.asynchronous,
-            event.sender_open_id,
+            f"Dispatching command={command.name} async={command.asynchronous} "
+            f"sender={event.sender_open_id}"
         )
         if command.asynchronous:
             job = self.store.create_job(
@@ -104,7 +95,7 @@ class FeishuBotService:
                 chat_id=event.chat_id,
                 user_open_id=event.sender_open_id,
             )
-            logger.info("Queued async job_id=%s command=%s", job.id, command.name)
+            logger.info(f"Queued async job_id={job.id} command={command.name}")
             self._send_reply(
                 event.chat_id,
                 f"Accepted job {job.id}: {command.name}. Use `/neo job {job.id}` to query status.",
@@ -115,7 +106,7 @@ class FeishuBotService:
         try:
             result_text = self.action_runner.run(command)
         except Exception as exc:
-            logger.exception("Quick bot command %s failed.", command.name)
+            logger.exception(f"Quick bot command {command.name} failed.")
             self._send_reply(
                 event.chat_id,
                 f"{command.name} failed.\n{type(exc).__name__}: {exc}",
@@ -126,7 +117,7 @@ class FeishuBotService:
 
     def _run_job(self, job_id: int, command: BotCommand) -> None:
         self.store.mark_job_running(job_id)
-        logger.info("Running async job_id=%s command=%s", job_id, command.name)
+        logger.info(f"Running async job_id={job_id} command={command.name}")
         job = self.store.get_job(job_id)
         if job is None:
             return
@@ -135,16 +126,16 @@ class FeishuBotService:
         except Exception as exc:
             error_text = f"{type(exc).__name__}: {exc}"
             self.store.mark_job_failed(job_id, error_text=error_text)
-            logger.exception("Async bot job %s failed.", job_id)
+            logger.exception(f"Async bot job {job_id} failed.")
             self._send_reply(job.chat_id, f"Job {job_id} failed.\n{error_text}")
             return
 
         self.store.mark_job_succeeded(job_id, result_text=result_text)
-        logger.info("Async job_id=%s succeeded", job_id)
+        logger.info(f"Async job_id={job_id} succeeded")
         self._send_reply(job.chat_id, f"Job {job_id} succeeded.\n{result_text}")
 
     def _send_reply(self, chat_id: str, text: str) -> None:
-        logger.info("Sending reply to chat_id=%s chars=%s", chat_id, len(text))
+        logger.info(f"Sending reply to chat_id={chat_id} chars={len(text)}")
         self.client.send_text(
             chat_id=chat_id, text=_truncate(text, self.settings.max_reply_chars)
         )

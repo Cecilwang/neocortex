@@ -40,7 +40,7 @@ class BotActionRunner:
     def run(self, command: BotCommand) -> str:
         """Execute one command and return user-facing text."""
 
-        logger.info("Running bot action command=%s", command.name)
+        logger.info(f"Running bot action command={command.name}")
         if command.name == "help":
             return HELP_TEXT
         if command.name == "profile":
@@ -62,17 +62,15 @@ class BotActionRunner:
 
     def _run_profile(self, command: BotCommand) -> str:
         security_id = _build_cn_security_id(command)
-        logger.info("Fetching bot profile for security=%s", security_id.ticker)
+        logger.info(f"Fetching bot profile for security={security_id.ticker}")
         profile = self.market_data.get_company_profile(security_id)
         return to_pretty_json(profile)
 
     def _run_bars(self, command: BotCommand) -> str:
         logger.info(
-            "Fetching bot bars for security=%s start=%s end=%s adjust=%s",
-            _build_cn_security_id(command).ticker,
-            command.args["start_date"],
-            command.args["end_date"],
-            command.args["adjust"],
+            f"Fetching bot bars for security={_build_cn_security_id(command).ticker} "
+            f"start={command.args['start_date']} end={command.args['end_date']} "
+            f"adjust={command.args['adjust']}"
         )
         bars = self.market_data.get_price_bars(
             _build_cn_security_id(command),
@@ -84,9 +82,8 @@ class BotActionRunner:
 
     def _run_db_table(self, command: BotCommand) -> str:
         logger.info(
-            "Running bot db_table query: table=%s limit=%s",
-            command.args["table"],
-            command.args["limit"],
+            f"Running bot db_table query: table={command.args['table']} "
+            f"limit={command.args['limit']}"
         )
         query = build_query(
             sql=None,
@@ -99,14 +96,14 @@ class BotActionRunner:
 
     def _run_db_sql(self, command: BotCommand) -> str:
         query = str(command.args["sql"])
-        logger.info("Running bot db_sql query length=%s", len(query))
+        logger.info(f"Running bot db_sql query length={len(query)}")
         _ensure_read_only_sql(query)
         columns, rows = execute_query(str(self.db_path), query)
         rendered = render_table(columns, rows)
         return rendered or "No rows."
 
     def _run_job_status(self, command: BotCommand) -> str:
-        logger.info("Fetching bot job status for job_id=%s", command.args["job_id"])
+        logger.info(f"Fetching bot job status for job_id={command.args['job_id']}")
         job = self.store.get_job(int(command.args["job_id"]))
         if job is None:
             return "Job not found."

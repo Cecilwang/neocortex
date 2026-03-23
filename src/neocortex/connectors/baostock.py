@@ -10,9 +10,11 @@ from functools import wraps
 import logging
 from typing import Any
 
+import pandas as pd
 from neocortex.connectors.base import BaseSourceConnector
 from neocortex.connectors.common import (
     infer_cn_exchange,
+    log_daily_records_access,
     optional_float,
 )
 from neocortex.connectors.types import (
@@ -22,11 +24,13 @@ from neocortex.connectors.types import (
     MacroPointRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.models import Exchange, Market, SecurityId
 from neocortex.utils.retry import connector_retry
 
 logger = logging.getLogger(__name__)
+_CN_TRADING_CALENDAR = "XSHG"
 
 
 def _security_id_from_baostock(code: str) -> SecurityId:
@@ -80,6 +84,19 @@ class _BaoStockApiClient:
             return self.api
         return importlib.import_module("baostock")
 
+    def _result_to_frame(self, result: Any) -> pd.DataFrame:
+        if getattr(result, "error_code", "0") != "0":
+            raise RuntimeError(f"BaoStock query failed: {result.error_msg}")
+        if all(
+            hasattr(result, attribute)
+            for attribute in ("fields", "next", "get_row_data")
+        ):
+            rows: list[list[str]] = []
+            while result.next():
+                rows.append(result.get_row_data())
+            return pd.DataFrame(rows, columns=list(result.fields))
+        return result.get_data()
+
     @connector_retry(source_name=source_name)
     @_with_baostock_session
     def list_securities(
@@ -90,12 +107,16 @@ class _BaoStockApiClient:
     ) -> tuple[SecurityListing, ...]:
         if market is not Market.CN:
             raise NotImplementedError("BaoStockConnector currently supports only CN.")
-        logger.info("Fetching BaoStock security universe: market=%s", market.value)
-        frame = api.query_all_stock().get_data()
+        logger.info(f"Fetching BaoStock security universe: market={market.value}")
+        frame = self._result_to_frame(api.query_stock_basic())
         listings: list[SecurityListing] = []
         for _, row in frame.iterrows():
             code = str(row["code"]).strip().lower()
             if not code.startswith(("sh.", "sz.")):
+                continue
+            if "type" in row and str(row["type"]).strip() not in {"1", ""}:
+                continue
+            if "status" in row and str(row["status"]).strip() not in {"1", ""}:
                 continue
             listings.append(
                 SecurityListing(
@@ -114,9 +135,9 @@ class _BaoStockApiClient:
         api: Any,
     ) -> SecurityProfileSnapshot:
         code = _to_baostock_code(security_id)
-        logger.info("Fetching BaoStock profile: security=%s", security_id.ticker)
-        basic = api.query_stock_basic(code=code).get_data()
-        industry = api.query_stock_industry(code=code).get_data()
+        logger.info(f"Fetching BaoStock profile: security={security_id.ticker}")
+        basic = self._result_to_frame(api.query_stock_basic(code=code))
+        industry = self._result_to_frame(api.query_stock_industry(code=code))
         company_name = None
         if not basic.empty:
             company_name = str(basic.iloc[0].get("code_name", "")).strip() or None
@@ -148,10 +169,8 @@ class _BaoStockApiClient:
         api: Any,
     ) -> tuple[DailyPriceBarRecord, ...]:
         logger.info(
-            "Fetching BaoStock raw daily bars: security=%s start=%s end=%s",
-            security_id.ticker,
-            start_date,
-            end_date,
+            f"Fetching BaoStock raw daily bars: security={security_id.ticker} "
+            f"start={start_date} end={end_date}"
         )
         return self._get_daily_price_bars(
             security_id,
@@ -177,11 +196,8 @@ class _BaoStockApiClient:
                 "BaoStockConnector supports only qfq or hfq adjusted bars."
             )
         logger.info(
-            "Fetching BaoStock adjusted daily bars: security=%s start=%s end=%s adjust=%s",
-            security_id.ticker,
-            start_date,
-            end_date,
-            adjustment_type,
+            f"Fetching BaoStock adjusted daily bars: security={security_id.ticker} "
+            f"start={start_date} end={end_date} adjust={adjustment_type}"
         )
         return self._get_daily_price_bars(
             security_id,
@@ -200,14 +216,16 @@ class _BaoStockApiClient:
         adjustflag: str,
         api: Any,
     ) -> tuple[DailyPriceBarRecord, ...]:
-        frame = api.query_history_k_data_plus(
-            _to_baostock_code(security_id),
-            "date,open,high,low,close,volume,amount",
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-            frequency="d",
-            adjustflag=adjustflag,
-        ).get_data()
+        frame = self._result_to_frame(
+            api.query_history_k_data_plus(
+                _to_baostock_code(security_id),
+                "date,open,high,low,close,volume,amount",
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+                frequency="d",
+                adjustflag=adjustflag,
+            )
+        )
         records: list[DailyPriceBarRecord] = []
         for _, row in frame.iterrows():
             records.append(
@@ -223,7 +241,16 @@ class _BaoStockApiClient:
                     amount=optional_float(row.get("amount")),
                 )
             )
-        return tuple(records)
+        fetched_records = tuple(records)
+        log_daily_records_access(
+            source_name=self.source_name,
+            security_id=security_id,
+            requested_start_date=start_date,
+            requested_end_date=end_date,
+            records=fetched_records,
+            adjust_label={"3": "raw", "2": "qfq", "1": "hfq"}[adjustflag],
+        )
+        return fetched_records
 
     @connector_retry(source_name=source_name)
     @_with_baostock_session
@@ -236,16 +263,16 @@ class _BaoStockApiClient:
         api: Any,
     ) -> tuple[AdjustmentFactorRecord, ...]:
         logger.info(
-            "Fetching BaoStock adjustment factors: security=%s start=%s end=%s",
-            security_id.ticker,
-            start_date,
-            end_date,
+            f"Fetching BaoStock adjustment factors: security={security_id.ticker} "
+            f"start={start_date} end={end_date}"
         )
-        frame = api.query_adjust_factor(
-            _to_baostock_code(security_id),
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-        ).get_data()
+        frame = self._result_to_frame(
+            api.query_adjust_factor(
+                _to_baostock_code(security_id),
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+            )
+        )
         records: list[AdjustmentFactorRecord] = []
         for _, row in frame.iterrows():
             trade_date = str(
@@ -289,9 +316,8 @@ class _BaoStockApiClient:
     ) -> tuple[FundamentalSnapshotRecord, ...]:
         code = _to_baostock_code(security_id)
         logger.info(
-            "Fetching BaoStock fundamentals: security=%s as_of_date=%s",
-            security_id.ticker,
-            as_of_date,
+            f"Fetching BaoStock fundamentals: security={security_id.ticker} "
+            f"as_of_date={as_of_date}"
         )
         year = as_of_date.year
         quarter = (as_of_date.month + 2) // 3
@@ -303,7 +329,7 @@ class _BaoStockApiClient:
             "cash_flow": api.query_cash_flow_data,
         }
         frames = {
-            kind: fetcher(code=code, year=year, quarter=quarter).get_data()
+            kind: self._result_to_frame(fetcher(code=code, year=year, quarter=quarter))
             for kind, fetcher in fetchers.items()
         }
         period_end_date = _quarter_period_end(year, quarter)
@@ -338,18 +364,20 @@ class _BaoStockApiClient:
         if market is not Market.CN:
             raise NotImplementedError("BaoStockConnector currently supports only CN.")
         logger.info(
-            "Fetching BaoStock macro points: market=%s as_of_date=%s",
-            market.value,
-            as_of_date,
+            f"Fetching BaoStock macro points: market={market.value} as_of_date={as_of_date}"
         )
-        money_supply = api.query_money_supply_data_month(
-            start_date=(as_of_date.replace(day=1)).isoformat(),
-            end_date=as_of_date.isoformat(),
-        ).get_data()
-        reserve_ratio = api.query_required_reserve_ratio_data(
-            start_date=(as_of_date.replace(day=1)).isoformat(),
-            end_date=as_of_date.isoformat(),
-        ).get_data()
+        money_supply = self._result_to_frame(
+            api.query_money_supply_data_month(
+                start_date=(as_of_date.replace(day=1)).isoformat(),
+                end_date=as_of_date.isoformat(),
+            )
+        )
+        reserve_ratio = self._result_to_frame(
+            api.query_required_reserve_ratio_data(
+                start_date=(as_of_date.replace(day=1)).isoformat(),
+                end_date=as_of_date.isoformat(),
+            )
+        )
         records: list[MacroPointRecord] = []
         for frame, series_prefix, category in (
             (money_supply, "cn_money_supply", "macro"),
@@ -376,6 +404,41 @@ class _BaoStockApiClient:
                         category=category,
                     )
                 )
+        return tuple(records)
+
+    @connector_retry(source_name=source_name)
+    @_with_baostock_session
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+        api: Any,
+    ) -> tuple[TradingDateRecord, ...]:
+        if market is not Market.CN:
+            raise NotImplementedError("BaoStockConnector currently supports only CN.")
+        logger.info(
+            f"Fetching BaoStock trading dates: market={market.value} "
+            f"start={start_date} end={end_date}"
+        )
+        frame = self._result_to_frame(
+            api.query_trade_dates(
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+            )
+        )
+        records: list[TradingDateRecord] = []
+        for _, row in frame.iterrows():
+            records.append(
+                TradingDateRecord(
+                    source=self.source_name,
+                    market=market,
+                    calendar=_CN_TRADING_CALENDAR,
+                    trade_date=str(row["calendar_date"]),
+                    is_trading_day=str(row["is_trading_day"]).strip() == "1",
+                )
+            )
         return tuple(records)
 
 
@@ -480,11 +543,9 @@ class BaoStockConnector(BaseSourceConnector):
         )
         if not factor_records:
             logger.info(
-                "BaoStock returned no adjustment factors; using raw daily bars unchanged: security=%s adjust=%s start=%s end=%s",
-                security_id.ticker,
-                adjustment_type,
-                start_date,
-                end_date,
+                "BaoStock returned no adjustment factors; using raw daily bars "
+                f"unchanged: security={security_id.ticker} adjust={adjustment_type} "
+                f"start={start_date} end={end_date}"
             )
             return raw_daily_records
         if adjustment_type == "qfq":
@@ -527,6 +588,19 @@ class BaoStockConnector(BaseSourceConnector):
         as_of_date: date,
     ) -> tuple[MacroPointRecord, ...]:
         return self._client.get_macro_points(market=market, as_of_date=as_of_date)
+
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        return self._client.get_trading_dates(
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
     def _apply_fwd_adjustment(
         self,

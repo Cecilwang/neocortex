@@ -34,24 +34,25 @@ market_data_provider:
       securities: [baostock, efinance, akshare]
       company_profile: [baostock, efinance, akshare]
       daily_price_bars: [baostock, efinance, akshare]
+      trading_dates: [baostock]
       fundamentals: [baostock]
       disclosures: [baostock]
       macro: [baostock]
 
 pipeline:
   agents:
-    technical_agent:
+    technical:
       template: technical_fine.yaml
       price_series_lookback_days: 400
-    quant_fundamental_agent:
+    quant_fundamental:
       template: quant_fundamental_fine.yaml
-    qualitative_fundamental_agent:
+    qualitative_fundamental:
       template: qualitative_fine.yaml
-    news_agent:
+    news:
       template: news_fine.yaml
-    sector_agent:
+    sector:
       template: sector_fine.yaml
-    macro_agent:
+    macro:
       template: macro_fine.yaml
-    pm_agent:
+    pm:
       template: pm_fine.yaml

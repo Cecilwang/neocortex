@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 import logging
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
@@ -16,6 +17,7 @@ from neocortex.connectors.types import (
     MacroPointRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.models import Exchange, Market, SecurityId
 from neocortex.storage.market_models import (
@@ -28,6 +30,7 @@ from neocortex.storage.market_models import (
     SecurityAliasRow,
     SecurityProfileRow,
     SecurityRow,
+    TradingDateRow,
 )
 from neocortex.storage.sqlite import SessionFactory, create_sqlite_engine
 from neocortex.storage.utils import normalize_alias, utc_now_iso
@@ -43,10 +46,9 @@ class SecurityRepository:
 
     def upsert(self, listing: SecurityListing, *, observed_at: str) -> None:
         logger.info(
-            "Upserting security: market=%s exchange=%s symbol=%s",
-            listing.security_id.market.value,
-            listing.security_id.exchange.value,
-            listing.security_id.symbol,
+            f"Upserting security: market={listing.security_id.market.value} "
+            f"exchange={listing.security_id.exchange.value} "
+            f"symbol={listing.security_id.symbol}"
         )
         with self.session_factory() as session:
             statement = sqlite_insert(SecurityRow).values(
@@ -66,7 +68,7 @@ class SecurityRepository:
     def list_security_ids(
         self, *, market: Market | None = None
     ) -> tuple[SecurityId, ...]:
-        logger.debug("Listing securities: market=%s", market.value if market else None)
+        logger.debug(f"Listing securities: market={market.value if market else None}")
         with self.session_factory() as session:
             query = session.query(SecurityRow)
             if market is not None:
@@ -100,10 +102,7 @@ class AliasRepository:
         updated_at: str,
     ) -> None:
         logger.info(
-            "Upserting alias: source=%s security=%s alias=%s",
-            source,
-            security_id.ticker,
-            alias,
+            f"Upserting alias: source={source} security={security_id.ticker} alias={alias}"
         )
         with self.session_factory() as session:
             statement = sqlite_insert(SecurityAliasRow).values(
@@ -134,6 +133,49 @@ class AliasRepository:
             )
             session.commit()
 
+    def search_security_ids(
+        self,
+        *,
+        market: Market,
+        query: str,
+        limit: int = 10,
+    ) -> tuple[tuple[SecurityId, str], ...]:
+        query_norm = normalize_alias(query)
+        logger.debug(
+            f"Searching security aliases: market={market.value} query={query} limit={limit}"
+        )
+        with self.session_factory() as session:
+            rows = (
+                session.query(SecurityAliasRow)
+                .filter(SecurityAliasRow.market == market.value)
+                .filter(SecurityAliasRow.alias_norm.like(f"%{query_norm}%"))
+                .order_by(
+                    func.length(SecurityAliasRow.alias_norm), SecurityAliasRow.alias
+                )
+                .all()
+            )
+
+        results: list[tuple[SecurityId, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for row in rows:
+            key = (row.market, row.exchange, row.symbol)
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(
+                (
+                    SecurityId(
+                        symbol=row.symbol,
+                        market=Market(row.market),
+                        exchange=Exchange(row.exchange),
+                    ),
+                    row.alias,
+                )
+            )
+            if len(results) >= limit:
+                break
+        return tuple(results)
+
 
 class SecurityProfileRepository:
     """Persist source-specific company profiles."""
@@ -143,9 +185,8 @@ class SecurityProfileRepository:
 
     def upsert(self, snapshot: SecurityProfileSnapshot, *, fetched_at: str) -> None:
         logger.info(
-            "Upserting security profile: source=%s security=%s",
-            snapshot.source,
-            snapshot.security_id.ticker,
+            f"Upserting security profile: source={snapshot.source} "
+            f"security={snapshot.security_id.ticker}"
         )
         with self.session_factory() as session:
             statement = sqlite_insert(SecurityProfileRow).values(
@@ -184,9 +225,7 @@ class SecurityProfileRepository:
         security_id: SecurityId,
     ) -> SecurityProfileSnapshot | None:
         logger.debug(
-            "Loading security profile: source=%s security=%s",
-            source,
-            security_id.ticker,
+            f"Loading security profile: source={source} security={security_id.ticker}"
         )
         with self.session_factory() as session:
             row = session.get(
@@ -224,10 +263,8 @@ class DailyPriceBarRepository:
         if not records:
             return 0
         logger.info(
-            "Upserting daily bars: source=%s security=%s count=%s",
-            records[0].source,
-            records[0].security_id.ticker,
-            len(records),
+            f"Upserting daily bars: source={records[0].source} "
+            f"security={records[0].security_id.ticker} count={len(records)}"
         )
         with self.session_factory() as session:
             for record in records:
@@ -277,11 +314,8 @@ class DailyPriceBarRepository:
         end_date: date,
     ) -> tuple[DailyPriceBarRecord, ...]:
         logger.debug(
-            "Loading daily bars: source=%s security=%s start=%s end=%s",
-            source,
-            security_id.ticker,
-            start_date,
-            end_date,
+            f"Loading daily bars: source={source} security={security_id.ticker} "
+            f"start={start_date} end={end_date}"
         )
         with self.session_factory() as session:
             rows = (
@@ -421,11 +455,9 @@ class IntradayPriceBarRepository:
         if not records:
             return 0
         logger.info(
-            "Upserting intraday bars: source=%s security=%s interval=%s count=%s",
-            records[0].source,
-            records[0].security_id.ticker,
-            records[0].interval,
-            len(records),
+            f"Upserting intraday bars: source={records[0].source} "
+            f"security={records[0].security_id.ticker} interval={records[0].interval} "
+            f"count={len(records)}"
         )
         with self.session_factory() as session:
             for record in records:
@@ -484,10 +516,8 @@ class FundamentalSnapshotRepository:
         if not records:
             return 0
         logger.info(
-            "Upserting fundamental snapshots: source=%s security=%s count=%s",
-            records[0].source,
-            records[0].security_id.ticker,
-            len(records),
+            f"Upserting fundamental snapshots: source={records[0].source} "
+            f"security={records[0].security_id.ticker} count={len(records)}"
         )
         with self.session_factory() as session:
             for record in records:
@@ -538,10 +568,8 @@ class FundamentalSnapshotRepository:
         as_of_date: date,
     ) -> tuple[FundamentalSnapshotRecord, ...]:
         logger.debug(
-            "Loading fundamentals as of: source=%s security=%s as_of_date=%s",
-            source,
-            security_id.ticker,
-            as_of_date,
+            f"Loading fundamentals as of: source={source} security={security_id.ticker} "
+            f"as_of_date={as_of_date}"
         )
         with self.session_factory() as session:
             rows = (
@@ -594,10 +622,8 @@ class DisclosureSectionRepository:
         if not records:
             return 0
         logger.info(
-            "Upserting disclosure sections: source=%s security=%s count=%s",
-            records[0].source,
-            records[0].security_id.ticker,
-            len(records),
+            f"Upserting disclosure sections: source={records[0].source} "
+            f"security={records[0].security_id.ticker} count={len(records)}"
         )
         with self.session_factory() as session:
             for record in records:
@@ -638,10 +664,8 @@ class DisclosureSectionRepository:
         as_of_date: date,
     ) -> tuple[DisclosureSectionRecord, ...]:
         logger.debug(
-            "Loading disclosures as of: source=%s security=%s as_of_date=%s",
-            source,
-            security_id.ticker,
-            as_of_date,
+            f"Loading disclosures as of: source={source} security={security_id.ticker} "
+            f"as_of_date={as_of_date}"
         )
         with self.session_factory() as session:
             rows = (
@@ -684,10 +708,8 @@ class MacroPointRepository:
         if not records:
             return 0
         logger.info(
-            "Upserting macro points: source=%s market=%s count=%s",
-            records[0].source,
-            records[0].market,
-            len(records),
+            f"Upserting macro points: source={records[0].source} "
+            f"market={records[0].market} count={len(records)}"
         )
         with self.session_factory() as session:
             for record in records:
@@ -736,10 +758,8 @@ class MacroPointRepository:
         as_of_date: date,
     ) -> tuple[MacroPointRecord, ...]:
         logger.debug(
-            "Loading macro points as of: source=%s market=%s as_of_date=%s",
-            source,
-            market.value,
-            as_of_date,
+            f"Loading macro points as of: source={source} market={market.value} "
+            f"as_of_date={as_of_date}"
         )
         with self.session_factory() as session:
             rows = (
@@ -776,11 +796,238 @@ class MacroPointRepository:
         )
 
 
+class TradingDateRepository:
+    """Persist source-specific market trading-date rows."""
+
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+
+    def upsert_many(
+        self,
+        records: tuple[TradingDateRecord, ...],
+        *,
+        fetched_at: str,
+    ) -> int:
+        if not records:
+            return 0
+        self._validate_upsert_batch(records)
+        source = records[0].source
+        market = records[0].market
+        calendar = records[0].calendar
+        new_start = min(date.fromisoformat(record.trade_date) for record in records)
+        new_end = max(date.fromisoformat(record.trade_date) for record in records)
+        existing_bounds = self.get_bounds(
+            source=source,
+            market=market,
+            calendar=calendar,
+        )
+        if existing_bounds is not None:
+            existing_start, existing_end = existing_bounds
+            if new_start > existing_end + timedelta(
+                days=1
+            ) or new_end < existing_start - timedelta(days=1):
+                raise ValueError(
+                    "Trading-date upsert must remain contiguous with existing stored range."
+                )
+        logger.info(
+            f"Upserting trading dates: source={records[0].source} "
+            f"market={records[0].market.value} calendar={records[0].calendar} "
+            f"count={len(records)}"
+        )
+        with self.session_factory() as session:
+            for record in records:
+                statement = sqlite_insert(TradingDateRow).values(
+                    source=record.source,
+                    market=record.market.value,
+                    calendar=record.calendar,
+                    trade_date=record.trade_date,
+                    is_trading_day=1 if record.is_trading_day else 0,
+                    fetched_at=fetched_at,
+                )
+                session.execute(
+                    statement.on_conflict_do_update(
+                        index_elements=["source", "market", "calendar", "trade_date"],
+                        set_={
+                            "is_trading_day": statement.excluded.is_trading_day,
+                            "fetched_at": statement.excluded.fetched_at,
+                        },
+                    )
+                )
+            session.commit()
+        return len(records)
+
+    def get_range(
+        self,
+        *,
+        source: str,
+        market: Market,
+        calendar: str,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        logger.debug(
+            f"Loading trading dates: source={source} market={market.value} "
+            f"calendar={calendar} start={start_date} end={end_date}"
+        )
+        with self.session_factory() as session:
+            rows = (
+                session.query(TradingDateRow)
+                .filter(
+                    TradingDateRow.source == source,
+                    TradingDateRow.market == market.value,
+                    TradingDateRow.calendar == calendar,
+                    TradingDateRow.trade_date >= start_date.isoformat(),
+                    TradingDateRow.trade_date <= end_date.isoformat(),
+                )
+                .order_by(TradingDateRow.trade_date)
+                .all()
+            )
+        return tuple(
+            TradingDateRecord(
+                source=row.source,
+                market=Market(row.market),
+                calendar=row.calendar,
+                trade_date=row.trade_date,
+                is_trading_day=bool(row.is_trading_day),
+            )
+            for row in rows
+        )
+
+    def get_bounds(
+        self,
+        *,
+        source: str,
+        market: Market,
+        calendar: str,
+    ) -> tuple[date, date] | None:
+        with self.session_factory() as session:
+            min_trade_date, max_trade_date, row_count = (
+                session.query(
+                    func.min(TradingDateRow.trade_date),
+                    func.max(TradingDateRow.trade_date),
+                    func.count(),
+                )
+                .filter(
+                    TradingDateRow.source == source,
+                    TradingDateRow.market == market.value,
+                    TradingDateRow.calendar == calendar,
+                )
+                .one()
+            )
+        if row_count == 0 or min_trade_date is None or max_trade_date is None:
+            return None
+        start_date = date.fromisoformat(min_trade_date)
+        end_date = date.fromisoformat(max_trade_date)
+        expected_count = (end_date - start_date).days + 1
+        if row_count != expected_count:
+            raise ValueError(
+                "Stored trading dates must remain contiguous in the database."
+            )
+        return start_date, end_date
+
+    def covers_range(
+        self,
+        *,
+        source: str,
+        market: Market,
+        calendar: str,
+        start_date: date,
+        end_date: date,
+    ) -> bool:
+        bounds = self.get_bounds(
+            source=source,
+            market=market,
+            calendar=calendar,
+        )
+        if bounds is None:
+            return False
+        existing_start, existing_end = bounds
+        return existing_start <= start_date and end_date <= existing_end
+
+    def next_trading_date(
+        self,
+        *,
+        source: str,
+        market: Market,
+        calendar: str,
+        trade_date: date,
+    ) -> date | None:
+        with self.session_factory() as session:
+            next_trade_date = (
+                session.query(func.min(TradingDateRow.trade_date))
+                .filter(
+                    TradingDateRow.source == source,
+                    TradingDateRow.market == market.value,
+                    TradingDateRow.calendar == calendar,
+                    TradingDateRow.trade_date >= trade_date.isoformat(),
+                    TradingDateRow.is_trading_day == 1,
+                )
+                .scalar()
+            )
+        return None if next_trade_date is None else date.fromisoformat(next_trade_date)
+
+    def previous_trading_date(
+        self,
+        *,
+        source: str,
+        market: Market,
+        calendar: str,
+        trade_date: date,
+    ) -> date | None:
+        with self.session_factory() as session:
+            previous_trade_date = (
+                session.query(func.max(TradingDateRow.trade_date))
+                .filter(
+                    TradingDateRow.source == source,
+                    TradingDateRow.market == market.value,
+                    TradingDateRow.calendar == calendar,
+                    TradingDateRow.trade_date <= trade_date.isoformat(),
+                    TradingDateRow.is_trading_day == 1,
+                )
+                .scalar()
+            )
+        return (
+            None
+            if previous_trade_date is None
+            else date.fromisoformat(previous_trade_date)
+        )
+
+    def _validate_upsert_batch(
+        self,
+        records: tuple[TradingDateRecord, ...],
+    ) -> None:
+        source = records[0].source
+        market = records[0].market
+        calendar = records[0].calendar
+        parsed_dates = sorted(
+            date.fromisoformat(record.trade_date) for record in records
+        )
+        if any(
+            record.source != source
+            or record.market is not market
+            or record.calendar != calendar
+            for record in records
+        ):
+            raise ValueError(
+                "Trading-date upsert batch must have one source, market, and calendar."
+            )
+        unique_dates = tuple(dict.fromkeys(parsed_dates))
+        if len(unique_dates) != len(parsed_dates):
+            raise ValueError(
+                "Trading-date upsert batch contains duplicate trade dates."
+            )
+        for previous, current in zip(unique_dates, unique_dates[1:]):
+            if current != previous + timedelta(days=1):
+                raise ValueError(
+                    "Trading-date upsert batch must be continuous day by day."
+                )
+
+
 class MarketDataStore:
     """Bundle all market-data repositories around one SQLite database."""
 
     def __init__(self, db_path: str | Path) -> None:
-        logger.info("Initializing MarketDataStore: db_path=%s", db_path)
+        logger.debug(f"Initializing MarketDataStore: db_path={db_path}")
         self.engine = create_sqlite_engine(db_path)
         self.session_factory = SessionFactory(bind=self.engine, expire_on_commit=False)
         self.securities = SecurityRepository(self.session_factory)
@@ -791,17 +1038,16 @@ class MarketDataStore:
         self.fundamental_snapshots = FundamentalSnapshotRepository(self.session_factory)
         self.disclosure_sections = DisclosureSectionRepository(self.session_factory)
         self.macro_points = MacroPointRepository(self.session_factory)
+        self.trading_dates = TradingDateRepository(self.session_factory)
 
     def ensure_schema(self) -> None:
-        logger.info("Ensuring market-data schema exists.")
+        logger.debug("Ensuring market-data schema exists.")
         MarketDataBase.metadata.create_all(self.engine)
 
     def seed_security_listing(self, listing: SecurityListing, *, source: str) -> None:
         logger.info(
-            "Seeding security listing: source=%s security=%s name=%s",
-            source,
-            listing.security_id.ticker,
-            listing.name,
+            f"Seeding security listing: source={source} security={listing.security_id.ticker} "
+            f"name={listing.name}"
         )
         observed_at = utc_now_iso()
         self.securities.upsert(listing, observed_at=observed_at)
@@ -815,7 +1061,7 @@ class MarketDataStore:
             )
 
     def dump_table(self, table_name: str) -> list[dict[str, object]]:
-        logger.debug("Dumping table contents: table=%s", table_name)
+        logger.debug(f"Dumping table contents: table={table_name}")
         table_lookup = {
             "securities": SecurityRow,
             "security_aliases": SecurityAliasRow,
@@ -825,6 +1071,7 @@ class MarketDataStore:
             "fundamental_snapshots": FundamentalSnapshotRow,
             "disclosure_sections": DisclosureSectionRow,
             "macro_points": MacroPointRow,
+            "trading_dates": TradingDateRow,
         }
         row_model = table_lookup[table_name]
         with self.session_factory() as session:

@@ -13,11 +13,11 @@ def build_query(*, sql: str | None, table: str | None, limit: int) -> str:
     """Return one read query from either raw SQL or table selection."""
 
     if sql is not None:
-        logger.info("Built query from raw SQL: length=%s", len(sql))
+        logger.info(f"Built query from raw SQL: length={len(sql)}")
         return sql
     assert table is not None
     query = f"SELECT * FROM {table} LIMIT {limit}"
-    logger.info("Built table query: table=%s limit=%s", table, limit)
+    logger.info(f"Built table query: table={table} limit={limit}")
     return query
 
 
@@ -26,16 +26,14 @@ def execute_query(
 ) -> tuple[tuple[str, ...], list[tuple[object, ...]]]:
     """Execute one SQLite query and return headers plus rows."""
 
-    logger.info("Executing SQLite query: db_path=%s length=%s", db_path, len(query))
+    logger.info(f"Executing SQLite query: db_path={db_path} length={len(query)}")
     with sqlite3.connect(db_path) as connection:
         cursor = connection.execute(query)
         columns = tuple(description[0] for description in cursor.description or ())
         rows = cursor.fetchall()
     logger.info(
-        "SQLite query completed: db_path=%s columns=%s rows=%s",
-        db_path,
-        len(columns),
-        len(rows),
+        f"SQLite query completed: db_path={db_path} "
+        f"columns={len(columns)} rows={len(rows)}"
     )
     return columns, rows
 

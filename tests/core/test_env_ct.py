@@ -24,7 +24,7 @@ def test_load_dotenv_reads_values_and_ignores_comments(tmp_path, monkeypatch) ->
 
     loaded_path = load_dotenv(dotenv_path)
 
-    assert loaded_path == dotenv_path
+    assert loaded_path is True
     assert os.environ["FEISHU_APP_ID"] == "cli_123"
     assert os.environ["FEISHU_APP_SECRET"] == "secret-value"
     assert os.environ["FEISHU_ADMIN_OPEN_IDS"] == "ou_1,ou_2"
@@ -84,7 +84,7 @@ def test_get_config_reads_yaml_from_env_override(tmp_path, monkeypatch) -> None:
                 "      macro: [baostock]",
                 "pipeline:",
                 "  agents:",
-                "    technical_agent:",
+                "    technical:",
                 "      template: technical_fine.yaml",
             ]
         ),
@@ -105,9 +105,7 @@ def test_get_config_reads_yaml_from_env_override(tmp_path, monkeypatch) -> None:
     )
     assert config.connectors.retry_for("akshare").max_attempts == 2
     assert config.connectors.retry_for("akshare").exc_info is False
-    assert (
-        config.pipeline.agents["technical_agent"]["template"] == "technical_fine.yaml"
-    )
+    assert config.pipeline.agents["technical"]["template"] == "technical_fine.yaml"
     reset_config_cache()
 
 

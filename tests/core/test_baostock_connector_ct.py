@@ -11,6 +11,7 @@ from neocortex.connectors.types import (
     MacroPointRecord,
     SecurityListing,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
 from neocortex.models import Exchange, Market, SecurityId
 from neocortex.storage.market_store import MarketDataStore
@@ -26,6 +27,22 @@ class _Result:
         return self._frame
 
 
+class _StreamingResult:
+    def __init__(self, frame: pd.DataFrame) -> None:
+        self.error_code = "0"
+        self.error_msg = ""
+        self.fields = list(frame.columns)
+        self._rows = frame.astype(str).values.tolist()
+        self._index = -1
+
+    def next(self) -> bool:
+        self._index += 1
+        return self._index < len(self._rows)
+
+    def get_row_data(self) -> list[str]:
+        return self._rows[self._index]
+
+
 class FakeBaoStockAPI:
     def __init__(self) -> None:
         self.login_calls = 0
@@ -39,17 +56,19 @@ class FakeBaoStockAPI:
         self.logout_calls += 1
         return None
 
-    def query_all_stock(self):
-        return _Result(
-            pd.DataFrame(
-                {
-                    "code": ["sh.600519", "sz.000001"],
-                    "code_name": ["贵州茅台", "平安银行"],
-                }
+    def query_stock_basic(self, code: str = "", code_name: str = ""):
+        assert code_name == ""
+        if code == "":
+            return _Result(
+                pd.DataFrame(
+                    {
+                        "code": ["sh.600519", "sz.000001", "sh.000300", "bj.430047"],
+                        "code_name": ["贵州茅台", "平安银行", "沪深300", "诺思兰德"],
+                        "type": ["1", "1", "2", "1"],
+                        "status": ["1", "1", "1", "1"],
+                    }
+                )
             )
-        )
-
-    def query_stock_basic(self, *, code: str):
         assert code == "sh.600519"
         return _Result(pd.DataFrame({"code_name": ["贵州茅台"]}))
 
@@ -145,6 +164,18 @@ class FakeBaoStockAPI:
                 {
                     "effectiveDate": ["2026-03-15"],
                     "largeRRR": ["7.0"],
+                }
+            )
+        )
+
+    def query_trade_dates(self, *, start_date: str, end_date: str):
+        assert start_date == "2026-03-20"
+        assert end_date == "2026-03-23"
+        return _StreamingResult(
+            pd.DataFrame(
+                {
+                    "calendar_date": ["2026-03-20", "2026-03-21", "2026-03-23"],
+                    "is_trading_day": ["1", "0", "1"],
                 }
             )
         )
@@ -414,6 +445,40 @@ def test_baostock_connector_fetches_daily_bars_and_adjustment_factors() -> None:
     )
 
 
+def test_baostock_connector_fetches_cn_trading_dates() -> None:
+    connector = BaoStockConnector(api=FakeBaoStockAPI())
+
+    records = connector.get_trading_dates(
+        market=Market.CN,
+        start_date=date(2026, 3, 20),
+        end_date=date(2026, 3, 23),
+    )
+
+    assert records == (
+        TradingDateRecord(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date="2026-03-20",
+            is_trading_day=True,
+        ),
+        TradingDateRecord(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date="2026-03-21",
+            is_trading_day=False,
+        ),
+        TradingDateRecord(
+            source="baostock",
+            market=Market.CN,
+            calendar="XSHG",
+            trade_date="2026-03-23",
+            is_trading_day=True,
+        ),
+    )
+
+
 def test_baostock_connector_fetches_direct_adjusted_daily_bars() -> None:
     connector = BaoStockConnector(api=FakeBaoStockDirectAdjustedAPI())
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
@@ -501,7 +566,9 @@ def test_baostock_connector_apply_adjustment_raises_without_raw_records() -> Non
         )
 
 
-def test_baostock_connector_apply_adjustment_returns_raw_when_no_factor_records() -> None:
+def test_baostock_connector_apply_adjustment_returns_raw_when_no_factor_records() -> (
+    None
+):
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     api = FakeBaoStockAdjustedAPI()
     connector = BaoStockConnector(api=api)

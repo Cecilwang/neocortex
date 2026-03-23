@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import json
+import logging
 from typing import Protocol
 
 import pandas as pd
@@ -14,7 +15,9 @@ from neocortex.connectors.types import (
     FundamentalSnapshotRecord,
     MacroPointRecord,
     SecurityProfileSnapshot,
+    TradingDateRecord,
 )
+from neocortex.markets import get_market_context
 from neocortex.models import (
     CompanyProfile,
     DisclosureSection,
@@ -30,6 +33,9 @@ from neocortex.models import (
     PriceSeries,
     SecurityId,
 )
+from neocortex.storage.market_store import MarketDataStore
+
+logger = logging.getLogger(__name__)
 
 RESOURCE_SECURITIES = "securities"
 RESOURCE_COMPANY_PROFILE = "company_profile"
@@ -37,6 +43,7 @@ RESOURCE_DAILY_PRICE_BARS = "daily_price_bars"
 RESOURCE_FUNDAMENTALS = "fundamentals"
 RESOURCE_DISCLOSURES = "disclosures"
 RESOURCE_MACRO = "macro"
+RESOURCE_TRADING_DATES = "trading_dates"
 
 
 class MarketDataProvider(Protocol):
@@ -82,6 +89,64 @@ class MarketDataProvider(Protocol):
         as_of_date: date,
     ) -> tuple[MacroSeriesPoint, ...]:
         """Return macro or market series points visible as of one date."""
+
+    def get_trading_dates(
+        self,
+        *,
+        market: Market,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[TradingDateRecord, ...]:
+        """Return one market's calendar records within one range."""
+
+    def is_trading_day(
+        self,
+        *,
+        market: Market,
+        trade_date: date,
+    ) -> bool:
+        records = self.get_trading_dates(
+            market=market,
+            start_date=trade_date,
+            end_date=trade_date,
+        )
+        if len(records) != 1:
+            raise KeyError((market, trade_date))
+        return records[0].is_trading_day
+
+    def get_next_trading_date(
+        self,
+        *,
+        market: Market,
+        trade_date: date,
+    ) -> date:
+        for offset in range(1, 31):
+            candidate_date = trade_date + timedelta(days=offset)
+            records = self.get_trading_dates(
+                market=market,
+                start_date=candidate_date,
+                end_date=candidate_date,
+            )
+            if len(records) == 1 and records[0].is_trading_day:
+                return candidate_date
+        raise KeyError((market, trade_date))
+
+    def get_previous_trading_date(
+        self,
+        *,
+        market: Market,
+        trade_date: date,
+    ) -> date:
+        for offset in range(1, 31):
+            candidate_date = trade_date - timedelta(days=offset)
+            records = self.get_trading_dates(
+                market=market,
+                start_date=candidate_date,
+                end_date=candidate_date,
+            )
+            if len(records) == 1 and records[0].is_trading_day:
+                return candidate_date
+        raise KeyError((market, trade_date))
 
 
 def company_profile_from_snapshot(snapshot: SecurityProfileSnapshot) -> CompanyProfile:
@@ -162,3 +227,42 @@ def macro_point_from_record(
         yoy_change_pct=record.yoy_change_pct,
         source=record.source,
     )
+
+
+def resolve_effective_daily_range(
+    *,
+    store: MarketDataStore,
+    source_name: str,
+    market: Market,
+    start_date: date,
+    end_date: date,
+) -> tuple[date, date]:
+    calendar = get_market_context(market).trading_calendar.value
+    effective_start_date = store.trading_dates.next_trading_date(
+        source=source_name,
+        market=market,
+        calendar=calendar,
+        trade_date=start_date,
+    )
+    effective_end_date = store.trading_dates.previous_trading_date(
+        source=source_name,
+        market=market,
+        calendar=calendar,
+        trade_date=end_date,
+    )
+    if effective_start_date is None or effective_start_date > end_date:
+        effective_start_date = start_date
+    if effective_end_date is None or effective_end_date < start_date:
+        effective_end_date = end_date
+    if effective_start_date > effective_end_date:
+        logger.info(
+            f"Effective daily range fallback to requested bounds: source={source_name} "
+            f"market={market.value} requested_start={start_date} "
+            f"requested_end={end_date} effective_start={effective_start_date} "
+            f"effective_end={effective_end_date}"
+        )
+        return start_date, end_date
+    logger.info(
+        f"Effective daily range resolved: source={source_name} market={market.value} requested_start={start_date} requested_end={end_date} effective_start={effective_start_date} effective_end={effective_end_date}"
+    )
+    return effective_start_date, effective_end_date

@@ -27,7 +27,7 @@ class PromptTemplate:
 def render_prompt_text(template_text: str, **context: Any) -> str:
     """Render one already-loaded prompt template string."""
 
-    logger.debug("Rendering prompt text: context_keys=%s", sorted(context))
+    logger.debug(f"Rendering prompt text: context_keys={sorted(context)}")
     return _render_template_text(template_text, **context).strip()
 
 
@@ -44,9 +44,8 @@ def load_prompt_template(template_name: str) -> PromptTemplate:
         user=str(document["user"]),
     )
     logger.info(
-        "Loaded prompt template: name=%s dependencies=%s",
-        template_name,
-        [dependency.value for dependency in template.dependencies],
+        f"Loaded prompt template: name={template_name} "
+        f"dependencies={[dependency.value for dependency in template.dependencies]}"
     )
     return template
 
@@ -75,4 +74,14 @@ def _render_template_text(
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    environment.filters["decimal"] = _format_decimal
     return environment.from_string(template_text).render(**context)
+
+
+def _format_decimal(value: Any, precision: int = 6) -> str:
+    if value is None:
+        return "None"
+    try:
+        return f"{float(value):.{precision}f}"
+    except (TypeError, ValueError):
+        return str(value)

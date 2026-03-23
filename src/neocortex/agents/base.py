@@ -50,10 +50,9 @@ class Agent(ABC):
         self.user_prompt = template.user
         self.dependencies = template.dependencies
         logger.debug(
-            "Initialized agent role=%s template=%s dependencies=%s",
-            getattr(self, "role", "unknown"),
-            template_name,
-            [dependency.value for dependency in self.dependencies],
+            f"Initialized agent role={getattr(self, 'role', 'unknown')} "
+            f"template={template_name} "
+            f"dependencies={[dependency.value for dependency in self.dependencies]}"
         )
 
     def build_request(
@@ -91,28 +90,17 @@ class Agent(ABC):
             raw_model_output=parsed_output,
         )
 
-    def get_system_prompt(self, request: AgentRequest) -> str:
-        """Render the system prompt for one request."""
+    def render_prompts(self, request: AgentRequest) -> tuple[str, str]:
+        """Render both prompts while building the template context only once."""
 
         if request.agent is not self.role:
             raise ValueError(
                 f"{self.__class__.__name__} requires a {self.role} request."
             )
-        return render_prompt_text(
-            self.system_prompt,
-            **self.build_render_context(request),
-        )
-
-    def get_user_prompt(self, request: AgentRequest) -> str:
-        """Render the user prompt for one request."""
-
-        if request.agent is not self.role:
-            raise ValueError(
-                f"{self.__class__.__name__} requires a {self.role} request."
-            )
-        return render_prompt_text(
-            self.user_prompt,
-            **self.build_render_context(request),
+        render_context = self.build_render_context(request)
+        return (
+            render_prompt_text(self.system_prompt, **render_context),
+            render_prompt_text(self.user_prompt, **render_context),
         )
 
     def build_render_context(self, request: AgentRequest) -> dict[str, object]:
@@ -130,23 +118,20 @@ class Agent(ABC):
         """Render the prompt, send it through the configured transport, and parse JSON."""
 
         logger.info(
-            "Sending agent request: role=%s request_id=%s security=%s",
-            self.role.value,
-            request.request_id,
-            request.security_id.ticker,
+            f"Sending agent request: role={self.role.value} "
+            f"request_id={request.request_id} security={request.security_id.ticker}"
         )
+        system_prompt, user_prompt = self.render_prompts(request)
         raw_output = transport.complete(
             agent=self.role,
-            system_prompt=self.get_system_prompt(request),
-            user_prompt=self.get_user_prompt(request),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             inference_config=inference_config,
         )
         parsed_output = parse_json_object(raw_output)
         logger.info(
-            "Received agent response: role=%s request_id=%s score=%s",
-            self.role.value,
-            request.request_id,
-            parsed_output.get("score"),
+            f"Received agent response: role={self.role.value} "
+            f"request_id={request.request_id} score={parsed_output.get('score')}"
         )
         return self.build_response(request, parsed_output)
 
@@ -163,11 +148,8 @@ class Agent(ABC):
         """Build, render, send, and wrap one agent invocation into a trace."""
 
         logger.info(
-            "Agent run started: role=%s request_id=%s security=%s as_of_date=%s",
-            self.role.value,
-            request_id,
-            security_id.ticker,
-            as_of_date,
+            f"Agent run started: role={self.role.value} request_id={request_id} "
+            f"security={security_id.ticker} as_of_date={as_of_date}"
         )
         request = self.build_request(
             request_id=request_id,
@@ -180,9 +162,7 @@ class Agent(ABC):
             response = self.send(request, inference_config, transport=transport)
         except Exception as exc:
             logger.exception(
-                "Agent run failed: role=%s request_id=%s",
-                self.role.value,
-                request_id,
+                f"Agent run failed: role={self.role.value} request_id={request_id}"
             )
             return AgentExecutionTrace(
                 request=request,
@@ -194,9 +174,7 @@ class Agent(ABC):
                 response_validation_errors=(str(exc),),
             )
         logger.info(
-            "Agent run finished: role=%s request_id=%s",
-            self.role.value,
-            request_id,
+            f"Agent run finished: role={self.role.value} request_id={request_id}"
         )
         return AgentExecutionTrace(
             request=request,

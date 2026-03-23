@@ -10,7 +10,11 @@ from typing import Any
 import pandas as pd
 
 from neocortex.connectors.base import BaseSourceConnector
-from neocortex.connectors.common import infer_cn_exchange, optional_float
+from neocortex.connectors.common import (
+    infer_cn_exchange,
+    log_daily_records_access,
+    optional_float,
+)
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
     SecurityListing,
@@ -39,7 +43,7 @@ class _EFinanceApiClient:
     def list_securities(self, *, market: Market) -> tuple[SecurityListing, ...]:
         if market is not Market.CN:
             raise NotImplementedError("EFinanceConnector currently supports only CN.")
-        logger.info("Fetching EFinance security universe: market=%s", market.value)
+        logger.info(f"Fetching EFinance security universe: market={market.value}")
         frame = self._api().stock.get_realtime_quotes(_EFINANCE_CN_UNIVERSE)
         listings: list[SecurityListing] = []
         for _, row in frame.iterrows():
@@ -67,7 +71,7 @@ class _EFinanceApiClient:
     ) -> SecurityProfileSnapshot:
         if security_id.market is not Market.CN:
             raise NotImplementedError("EFinanceConnector currently supports only CN.")
-        logger.info("Fetching EFinance profile: security=%s", security_id.ticker)
+        logger.info(f"Fetching EFinance profile: security={security_id.ticker}")
         raw = self._api().stock.get_base_info(security_id.symbol)
         if isinstance(raw, pd.DataFrame):
             series = raw.iloc[0]
@@ -75,7 +79,9 @@ class _EFinanceApiClient:
             series = raw
         company_name = _series_value(series, "股票名称")
         industry = _series_value(series, "所处行业")
-        assert company_name and industry, f"Incomplete profile data for {security_id}: {raw}"
+        assert company_name and industry, (
+            f"Incomplete profile data for {security_id}: {raw}"
+        )
         return SecurityProfileSnapshot(
             source=self.source_name,
             security_id=security_id,
@@ -96,10 +102,8 @@ class _EFinanceApiClient:
         end_date: date,
     ) -> tuple[DailyPriceBarRecord, ...]:
         logger.info(
-            "Fetching EFinance raw daily bars: security=%s start=%s end=%s",
-            security_id.ticker,
-            start_date,
-            end_date,
+            f"Fetching EFinance raw daily bars: security={security_id.ticker} "
+            f"start={start_date} end={end_date}"
         )
         return self._get_daily_price_bars(
             security_id,
@@ -122,11 +126,8 @@ class _EFinanceApiClient:
                 "EFinanceConnector supports only qfq or hfq adjusted bars."
             )
         logger.info(
-            "Fetching EFinance adjusted daily bars: security=%s start=%s end=%s adjust=%s",
-            security_id.ticker,
-            start_date,
-            end_date,
-            adjustment_type,
+            f"Fetching EFinance adjusted daily bars: security={security_id.ticker} "
+            f"start={start_date} end={end_date} adjust={adjustment_type}"
         )
         return self._get_daily_price_bars(
             security_id,
@@ -169,7 +170,16 @@ class _EFinanceApiClient:
                     amount=optional_float(row.get("成交额")),
                 )
             )
-        return tuple(records)
+        fetched_records = tuple(records)
+        log_daily_records_access(
+            source_name=self.source_name,
+            security_id=security_id,
+            requested_start_date=start_date,
+            requested_end_date=end_date,
+            records=fetched_records,
+            adjust_label="raw" if fqt == 0 else ("qfq" if fqt == 1 else "hfq"),
+        )
+        return fetched_records
 
 
 class EFinanceConnector(BaseSourceConnector):

@@ -48,11 +48,8 @@ def connector_retry(
                     if attempt >= attempts:
                         raise
                     logger.warning(
-                        "Retrying after attempt %s/%s due to %s: %s",
-                        attempt,
-                        attempts,
-                        type(exc).__name__,
-                        exc,
+                        f"Retrying after attempt {attempt}/{attempts} due to "
+                        f"{type(exc).__name__}: {exc}",
                         exc_info=retry_config.exc_info,
                     )
                     if retry_config.backoff_seconds > 0:

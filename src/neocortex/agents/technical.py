@@ -40,16 +40,15 @@ class TechnicalAgent(Agent):
 
     def build_render_context(self, request: AgentRequest) -> dict[str, object]:
         logger.info(
-            "Building technical render context: security=%s as_of_date=%s lookback_days=%s",
-            request.security_id.ticker,
-            request.as_of_date,
-            self.price_series_lookback_days,
+            f"Building technical render context: security={request.security_id.ticker} "
+            f"as_of_date={request.as_of_date} lookback_days={self.price_series_lookback_days}"
         )
         price_series = self.market_data.get_price_bars(
             request.security_id,
             start_date=request.as_of_date
             - timedelta(days=self.price_series_lookback_days),
             end_date=request.as_of_date,
+            adjust="qfq",
         )
         if price_series.security_id != request.security_id:
             raise ValueError(
@@ -64,10 +63,8 @@ class TechnicalAgent(Agent):
         for indicator in list_indicator_specs():
             context[indicator.key] = getattr(indicator_namespace, indicator.key)
         logger.info(
-            "Technical render context ready: security=%s indicators=%s bars=%s",
-            request.security_id.ticker,
-            len(list_indicator_specs()),
-            len(price_series.bars),
+            f"Technical render context ready: security={request.security_id.ticker} "
+            f"indicators={len(list_indicator_specs())} bars={len(price_series.bars)}"
         )
         return context
 

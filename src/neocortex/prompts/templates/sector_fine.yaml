@@ -1,8 +1,8 @@
 dependencies:
-  - technical_agent
-  - quant_fundamental_agent
-  - qualitative_fundamental_agent
-  - news_agent
+  - technical
+  - quant_fundamental
+  - qualitative_fundamental
+  - news
 system: |
   Role: You are a Sector Specialist on the investment committee. Your task is to synthesize reports from Technical, Quantitative, and Qualitative sub-analysts to provide a definitive 1-month investment recommendation.
 

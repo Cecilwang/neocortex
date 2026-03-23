@@ -17,13 +17,13 @@ JsonDict = dict[str, Any]
 class AgentRole(StrEnum):
     """Canonical agent identifiers used across prompts, traces, and UI."""
 
-    TECHNICAL = "technical_agent"
-    QUANT_FUNDAMENTAL = "quant_fundamental_agent"
-    QUALITATIVE_FUNDAMENTAL = "qualitative_fundamental_agent"
-    NEWS = "news_agent"
-    SECTOR = "sector_agent"
-    MACRO = "macro_agent"
-    PM = "pm_agent"
+    TECHNICAL = "technical"
+    QUANT_FUNDAMENTAL = "quant_fundamental"
+    QUALITATIVE_FUNDAMENTAL = "qualitative_fundamental"
+    NEWS = "news"
+    SECTOR = "sector"
+    MACRO = "macro"
+    PM = "pm"
 
 
 class ResponseValidationStatus(StrEnum):

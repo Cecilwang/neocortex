@@ -5,10 +5,7 @@ from __future__ import annotations
 import logging
 
 
-DEFAULT_LOG_FORMAT = (
-    "%(asctime)s %(levelname)s %(name)s "
-    "[%(filename)s:%(funcName)s:%(lineno)d] %(message)s"
-)
+DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
 
 
 def configure_logging(

@@ -10,6 +10,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
@@ -44,6 +45,11 @@ class ROCIndicator(IndicatorSpec):
         parameters: ROCParams | dict[str, object] | None = None,
     ) -> ROC:
         resolved_parameters = _coerce_params(parameters)
+        log_indicator_calculation(
+            indicator_key=self.key,
+            bars=bars,
+            parameters=resolved_parameters,
+        )
         period = resolved_parameters.period
         closes = bars.closes
         base = closes.shift(period)

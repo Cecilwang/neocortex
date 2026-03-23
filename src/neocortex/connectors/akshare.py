@@ -11,6 +11,7 @@ import pandas as pd
 
 from neocortex.connectors.base import BaseSourceConnector
 from neocortex.connectors.common import infer_cn_exchange
+from neocortex.connectors.common import log_daily_records_access
 from neocortex.connectors.types import (
     DailyPriceBarRecord,
     SecurityListing,
@@ -99,8 +100,8 @@ class _AkShareApiClient:
             company_name, industry = self._get_company_profile_from_em(security_id)
         except Exception:
             logger.warning(
-                "Eastmoney company profile request failed for %s; falling back to Xueqiu.",
-                security_id.ticker,
+                f"Eastmoney company profile request failed for {security_id.ticker}; "
+                "falling back to Xueqiu."
             )
             company_name, industry = self._get_company_profile_from_xueqiu(security_id)
         return SecurityProfileSnapshot(
@@ -120,8 +121,7 @@ class _AkShareApiClient:
     ) -> tuple[str | None, str | None]:
         symbol = self._symbol_for_request(security_id)
         logger.info(
-            "Fetching AkShare company profile for %s from Eastmoney.",
-            security_id.ticker,
+            f"Fetching AkShare company profile for {security_id.ticker} from Eastmoney."
         )
         raw_profile = self._api().stock_individual_info_em(
             symbol=symbol,
@@ -140,7 +140,7 @@ class _AkShareApiClient:
         self, security_id: SecurityId
     ) -> tuple[str | None, str | None]:
         logger.info(
-            "Fetching AkShare company profile for %s from Xueqiu.", security_id.ticker
+            f"Fetching AkShare company profile for {security_id.ticker} from Xueqiu."
         )
         raw_profile = self._api().stock_individual_basic_info_xq(
             symbol=self._xueqiu_symbol_for_request(security_id),
@@ -213,10 +213,8 @@ class _AkShareApiClient:
         symbol = self._symbol_for_request(security_id)
         provider_adjust = adjust or ""
         logger.info(
-            "Fetching AkShare price bars for %s between %s and %s.",
-            security_id.ticker,
-            start_date,
-            end_date,
+            f"Fetching AkShare price bars for {security_id.ticker} between "
+            f"{start_date} and {end_date}."
         )
         frame = self._api().stock_zh_a_hist(
             symbol=symbol,
@@ -251,7 +249,16 @@ class _AkShareApiClient:
                     amount=None,
                 )
             )
-        return tuple(records)
+        fetched_records = tuple(records)
+        log_daily_records_access(
+            source_name=self.source_name,
+            security_id=security_id,
+            requested_start_date=start_date,
+            requested_end_date=end_date,
+            records=fetched_records,
+            adjust_label=adjust or "raw",
+        )
+        return fetched_records
 
 
 class AkShareConnector(BaseSourceConnector):

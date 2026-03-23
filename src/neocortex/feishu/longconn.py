@@ -32,9 +32,8 @@ class FeishuLongConnectionRunner:
         """Connect to Feishu and block while receiving events."""
 
         logger.info(
-            "Starting Feishu long connection: app_id=%s domain=%s",
-            self.settings.app_id,
-            self.settings.base_url,
+            f"Starting Feishu long connection: app_id={self.settings.app_id} "
+            f"domain={self.settings.base_url}"
         )
         client = self.ws_client_factory(
             self.settings.app_id,
@@ -59,7 +58,7 @@ class FeishuLongConnectionRunner:
 
     def _handle_message_receive_event(self, event: lark.CustomizedEvent) -> None:
         event_id = getattr(event.header, "event_id", None)
-        logger.info("Received long-connection event: event_id=%s", event_id)
+        logger.info(f"Received long-connection event: event_id={event_id}")
         payload = {
             "schema": "2.0",
             "header": {

@@ -85,6 +85,12 @@ class SecurityId:
 
         return f"{self.market}:{self.symbol}"
 
+    def __str__(self) -> str:
+        return self.ticker
+
+    def __repr__(self) -> str:
+        return self.ticker
+
 
 @dataclass(frozen=True, slots=True)
 class MarketContext:

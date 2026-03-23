@@ -8,6 +8,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 import pandas as pd
@@ -45,6 +46,11 @@ class EMAIndicator(IndicatorSpec):
         parameters: EMAParams | dict[str, object] | None = None,
     ) -> EMA:
         resolved_parameters = _coerce_params(parameters)
+        log_indicator_calculation(
+            indicator_key=self.key,
+            bars=bars,
+            parameters=resolved_parameters,
+        )
         window = resolved_parameters.window
         closes = bars.closes
         if closes.empty:

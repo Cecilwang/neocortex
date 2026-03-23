@@ -19,16 +19,10 @@ logger = logging.getLogger(__name__)
 class SourceRoutingError(Exception):
     resource_type: str
     target: object
-    failures: tuple[tuple[str, Exception], ...]
 
     def __str__(self) -> str:
-        summary = ", ".join(
-            f"{source_name}:{type(error).__name__}"
-            for source_name, error in self.failures
-        )
         return (
-            f"All sources failed for resource={self.resource_type} "
-            f"target={self.target}: {summary}"
+            f"All sources failed for resource={self.resource_type} target={self.target}"
         )
 
 
@@ -81,122 +75,64 @@ def _resolve_route_context(signature, *args, **kwargs) -> tuple[Market, object]:
     return market, security_id or market
 
 
-def route_db_by_source(*, resource_type: str):
-    """Try DB-backed per-source lookups until one hits, otherwise raise KeyError."""
+def route_by_source(resource_type: str):
+    """Try per-source routing on any component with source_priority/source_connectors."""
 
     def decorator(method):
         signature = inspect.signature(method)
+        method_name = method.__name__
 
         @wraps(method)
-        def wrapper(self: SourceRoutedComponent, *args, **kwargs):
-            assert isinstance(self, SourceRoutedComponent), (
-                "DB routing requires a SourceRoutedComponent."
-            )
+        def wrapper(self, *args, **kwargs):
             market, target = _resolve_route_context(signature, self, *args, **kwargs)
             for source_name in self._priority(market, resource_type):
-                logger.info(
-                    "Trying DB route: resource=%s source=%s target=%s",
-                    resource_type,
-                    source_name,
-                    target,
+                logger.debug(
+                    f"Trying method={method_name} resource={resource_type} source={source_name} target={target}"
                 )
                 try:
                     result = method(self, *args, source_name=source_name, **kwargs)
                     logger.info(
-                        "DB route succeeded: resource=%s source=%s target=%s",
-                        resource_type,
-                        source_name,
-                        target,
-                    )
-                    return result
-                except KeyError:
-                    logger.info(
-                        "DB route missed: resource=%s source=%s target=%s",
-                        resource_type,
-                        source_name,
-                        target,
-                    )
-                    continue
-            raise KeyError(target)
-
-        return wrapper
-
-    return decorator
-
-
-def route_fetch_by_source(*, resource_type: str):
-    """Try connector-backed per-source fetches until one succeeds."""
-
-    def decorator(method):
-        signature = inspect.signature(method)
-
-        @wraps(method)
-        def wrapper(self: SourceRoutedComponent, *args, **kwargs):
-            assert isinstance(self, SourceRoutedComponent), (
-                "DB routing requires a SourceRoutedComponent."
-            )
-            market, target = _resolve_route_context(signature, self, *args, **kwargs)
-            failures: list[tuple[str, Exception]] = []
-            for source_name in self._priority(market, resource_type):
-                logger.info(
-                    "Trying fetch route: resource=%s source=%s target=%s",
-                    resource_type,
-                    source_name,
-                    target,
-                )
-                try:
-                    result = method(self, *args, source_name=source_name, **kwargs)
-                    logger.info(
-                        "Fetch route succeeded: resource=%s source=%s target=%s",
-                        resource_type,
-                        source_name,
-                        target,
+                        f"{method_name} succeeded: resource={resource_type} "
+                        f"source={source_name} target={target}"
                     )
                     return result
                 except Exception as exc:
                     logger.info(
-                        "Fetch route failed: resource=%s source=%s target=%s error=%s",
-                        resource_type,
-                        source_name,
-                        target,
-                        exc,
+                        f"{method_name} failed: resource={resource_type} "
+                        f"source={source_name} target={target} error={exc}"
                     )
-                    failures.append((source_name, exc))
-            raise SourceRoutingError(
-                resource_type=resource_type,
-                target=target,
-                failures=tuple(failures),
-            )
+            raise SourceRoutingError(resource_type=resource_type, target=target)
 
         return wrapper
 
     return decorator
 
 
-def route_read_through(*, db_method: str | None, fetch_method: str, resource_label: str):
+def route_read_through(*, db_method: str | None, fetch_method: str):
     """Try DB reader first, then fall back to source fetcher on DB miss."""
 
     def decorator(method):
         signature = inspect.signature(method)
+        resource_name = method.__name__
 
         @wraps(method)
         def wrapper(self, *args, **kwargs):
             bound = signature.bind_partial(self, *args, **kwargs)
             bound.apply_defaults()
             call_kwargs = {
-                name: value
-                for name, value in bound.arguments.items()
-                if name != "self"
+                name: value for name, value in bound.arguments.items() if name != "self"
             }
             route_target = bound.arguments.get("security_id") or bound.arguments.get(
                 "market"
             )
-            target = f"{resource_label}:{route_target}" if route_target else resource_label
+            target = (
+                f"{resource_name}:{route_target}" if route_target else resource_name
+            )
             if db_method is not None:
                 try:
                     return getattr(self.db_reader, db_method)(**call_kwargs)
-                except KeyError:
-                    logger.info("%s DB miss: target=%s", resource_label, target)
+                except SourceRoutingError:
+                    logger.info(f"{resource_name} DB miss: target={target}")
             return getattr(self.source_fetcher, fetch_method)(**call_kwargs)
 
         return wrapper

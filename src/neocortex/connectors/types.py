@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from neocortex.models import Market
 from neocortex.models import SecurityId
 
 
@@ -113,3 +114,14 @@ class MacroPointRecord:
     value: float | None = None
     change_pct: float | None = None
     yoy_change_pct: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TradingDateRecord:
+    """One source-specific trading-date calendar record."""
+
+    source: str
+    market: Market
+    calendar: str
+    trade_date: str
+    is_trading_day: bool
