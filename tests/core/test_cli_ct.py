@@ -793,6 +793,92 @@ def test_cli_indicator_subcommand_uses_provider_bars_and_parameters(
     )
 
 
+def test_cli_db_query_command_prints_table_output_from_registry(
+    tmp_path,
+    capsys,
+) -> None:
+    from neocortex import cli
+
+    db_path = tmp_path / "query.sqlite"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE company_profiles (
+                symbol TEXT NOT NULL,
+                company_name TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO company_profiles (symbol, company_name)
+            VALUES ('000014', '沙河股份')
+            """
+        )
+        connection.commit()
+
+    exit_code = cli.main(
+        [
+            "db",
+            "query",
+            "--db-path",
+            str(db_path),
+            "--table",
+            "company_profiles",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "symbol" in output
+    assert "company_name" in output
+    assert "000014" in output
+    assert "沙河股份" in output
+
+
+def test_cli_db_query_command_prints_json_output_from_registry(
+    tmp_path,
+    capsys,
+) -> None:
+    from neocortex import cli
+
+    db_path = tmp_path / "query.sqlite"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE company_profiles (
+                symbol TEXT NOT NULL,
+                company_name TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO company_profiles (symbol, company_name)
+            VALUES ('000014', '沙河股份')
+            """
+        )
+        connection.commit()
+
+    exit_code = cli.main(
+        [
+            "db",
+            "query",
+            "--db-path",
+            str(db_path),
+            "--table",
+            "company_profiles",
+            "--format",
+            "json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["columns"] == ["symbol", "company_name"]
+    assert payload["rows"] == [["000014", "沙河股份"]]
+
+
 def test_cli_agent_render_defaults_as_of_date_with_market_rule(
     monkeypatch,
     capsys,
@@ -911,9 +997,9 @@ def test_cli_db_query_renders_table(tmp_path, capsys) -> None:
     exit_code = cli.main(
         [
             "db",
+            "query",
             "--db-path",
             str(db_path),
-            "query",
             "--table",
             "company_profiles",
         ]

@@ -18,6 +18,11 @@ uv run python -m neocortex --help
 
 CLI 的业务结果输出到标准输出；诊断信息走 logging。
 
+命令结构约束：
+- 新命令和已迁移到 command kernel 的命令，所有选项都必须挂在叶子命令上
+- 不在中间节点定义选项，例如使用 `db query --db-path ...`，而不是 `db --db-path ... query ...`
+- 尚未迁移的旧命令会逐步收敛到这个形态
+
 带 `--start-date/--end-date` 的命令在不显式传 `--end-date` 时：
 - `CN` 市场会先判断今天是否为交易日；如果不是，则取前一个交易日
 - `CN` 市场如果今天是交易日，则在 BaoStock 数据通常于北京时间 `18:30` 后可用时取今天，否则取前一个交易日

@@ -104,6 +104,20 @@ def test_command_registry_registers_and_lists_specs() -> None:
     assert registry.list() == (spec,)
 
 
+def test_registry_match_command_returns_longest_registered_path() -> None:
+    registry = CommandRegistry()
+    registry.register(
+        _inspect_spec(("demo",), description="Leaf description for demo.")
+    )
+    registry.register(
+        _inspect_spec(("demo", "run"), description="Leaf description for demo run.")
+    )
+
+    assert registry.match_command(("demo", "run", "alpha")) == ("demo", "run")
+    assert registry.match_command(("demo", "--help")) == ("demo",)
+    assert registry.match_command(("unknown", "run")) is None
+
+
 def test_registry_parser_builds_namespace_from_argparse_spec() -> None:
     registry = CommandRegistry()
     spec = _demo_spec()

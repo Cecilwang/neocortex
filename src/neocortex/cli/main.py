@@ -21,7 +21,6 @@ from neocortex.log import configure_logging
 
 from neocortex.cli.agent import add_agent_commands
 from neocortex.cli.connector import add_connector_commands
-from neocortex.cli.db import add_db_commands
 from neocortex.cli.feishu import add_feishu_commands
 from neocortex.cli.indicator import add_indicator_commands
 from neocortex.cli.market_data import add_market_data_provider_commands
@@ -42,10 +41,6 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     )
     subcommands = parser.add_subparsers(dest="domain", required=True)
 
-    add_db_commands(
-        subcommands,
-        default_db_path=str(app_config.storage.market_data_db_path),
-    )
     add_connector_commands(subcommands)
     add_sync_commands(
         subcommands,
@@ -87,12 +82,14 @@ def _build_bootstrap_parser() -> argparse.ArgumentParser:
 def _run_cli_registry_command(
     command_tokens: Sequence[str],
     *,
+    command_id: tuple[str, ...],
     log_level: str,
     registry,
 ) -> int:
     configure_logging(log_level)
-    root_command = command_tokens[0] if command_tokens else None
-    logger.info(f"CLI dispatch selected registry path: root_command={root_command}")
+    logger.debug(
+        f"CLI dispatch selected registry path: command_id={' '.join(command_id)}"
+    )
     context = CommandContext(
         actor=CommandActor(
             source=InvocationSource.CLI,
@@ -127,12 +124,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         reset_config_cache()
     _, command_tokens = bootstrap.parse_known_args(argv)
     registry = build_command_registry()
-    # Temporary mixed-mode split: registry-managed roots opt into the new kernel
-    # while all remaining roots still flow through legacy argparse wiring.
-    root_command = command_tokens[0] if command_tokens else None
-    if registry.manages_root(root_command):
+    # Temporary mixed-mode split: registry-managed command paths opt into the new
+    # kernel while all remaining paths still flow through legacy argparse wiring.
+    matched_command = registry.match_command(command_tokens)
+    if matched_command is not None:
         return _run_cli_registry_command(
             command_tokens,
+            command_id=matched_command,
             log_level=bootstrap_args.log_level,
             registry=registry,
         )

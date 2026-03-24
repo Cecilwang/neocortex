@@ -240,8 +240,27 @@ class CommandRegistry:
         # Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
         return root in {command_id[0] for command_id in self._specs}
 
+    def match_command(
+        self, tokens: list[str] | tuple[str, ...]
+    ) -> tuple[str, ...] | None:
+        """Return the longest registered command path found in the leading argv tokens.
+
+        Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
+        """
+
+        matched_command: tuple[str, ...] | None = None
+        path_tokens: list[str] = []
+        for token in tokens:
+            if token.startswith("-"):
+                break
+            path_tokens.append(token)
+            candidate = tuple(path_tokens)
+            if candidate in self._specs:
+                matched_command = candidate
+        return matched_command
+
     def build_parser(self) -> CommandArgumentParser:
-        logger.info("Building argparse parser for command registry.")
+        logger.debug("Building argparse parser for command registry.")
         parser = CommandArgumentParser(prog="neocortex")
         subcommands = parser.add_subparsers(dest="_command_root", required=True)
         parser_nodes: dict[tuple[str, ...], argparse.ArgumentParser] = {}
@@ -267,7 +286,7 @@ class CommandRegistry:
                     child = parent.add_parser(part, **parser_kwargs)
                     parser_nodes[prefix] = child
                 if is_leaf:
-                    logger.info(f"Binding argparse leaf for command_id={spec.path}")
+                    logger.debug(f"Binding argparse leaf for [{spec.path}]")
                     spec.configure_parser(child)
                     child.set_defaults(_command_spec=spec)
                     continue
@@ -283,7 +302,7 @@ class CommandRegistry:
 
     def parse(self, tokens: list[str] | tuple[str, ...]) -> ParsedInvocation:
         raw_tokens = tuple(tokens)
-        logger.info("Registry parser received command invocation.")
+        logger.debug("Registry parser received command invocation.")
         parser = self.build_parser()
         args = parser.parse_args(raw_tokens)
         spec = getattr(args, "_command_spec", None)
@@ -291,7 +310,7 @@ class CommandRegistry:
             raise RuntimeError(
                 "Registry parser returned successfully without a bound command spec."
             )
-        logger.info(f"Registry parser matched command_id={spec.path}")
+        logger.debug(f"Registry parser matched [{spec.path}]")
         return ParsedInvocation(
             spec=spec,
             args=args,
@@ -306,7 +325,7 @@ class CommandRegistry:
         """Parse and execute one registry-managed command for any transport."""
 
         raw_tokens = tuple(tokens)
-        logger.info(f"Executing registry command: source={context.actor.source.value}")
+        logger.debug(f"Executing registry command: source={context.actor.source.value}")
         invocation = self.parse(raw_tokens)
         dispatcher = CommandDispatcher()
         return dispatcher.dispatch(invocation, context)
@@ -322,18 +341,18 @@ class CommandDispatcher:
     ) -> CommandResult:
         spec = invocation.spec
         logger.info(
-            f"Dispatching command_id={spec.path} source={context.actor.source.value} "
+            f"Dispatching [{spec.path}] source={context.actor.source.value} "
             f"auth={spec.auth.value} execution={spec.execution.value}"
         )
         if spec.auth is AuthPolicy.ADMIN and not context.actor.is_admin:
             logger.warning(
-                f"Rejected admin command_id={spec.path} source={context.actor.source.value}"
+                f"Rejected admin [{spec.path}] source={context.actor.source.value}"
             )
-            raise PermissionError(f"Permission denied for command {spec.path}.")
+            raise PermissionError(f"Permission denied for [{spec.path}].")
         try:
             result = spec.handler(invocation.args, context)
         except Exception:
-            logger.exception(f"Command handler failed: command_id={spec.path}")
+            logger.exception(f"Command handler failed: [{spec.path}]")
             raise
-        logger.info(f"Command completed: command_id={spec.path}")
+        logger.debug(f"Command completed: [{spec.path}]")
         return result
