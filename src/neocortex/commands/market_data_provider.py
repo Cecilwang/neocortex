@@ -39,7 +39,9 @@ def _normalize_cell_value(value: object) -> object:
     return value
 
 
-def _dataframe_columns_and_rows(frame) -> tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]:
+def _dataframe_columns_and_rows(
+    frame,
+) -> tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]:
     columns = tuple(str(column) for column in frame.columns)
     rows = tuple(
         tuple(_normalize_cell_value(value) for value in row)
@@ -414,7 +416,9 @@ def build_market_data_provider_command_specs(
     default_db_path: str,
 ) -> tuple[CommandSpec, ...]:
     return (
-        build_market_data_provider_init_db_command_spec(default_db_path=default_db_path),
+        build_market_data_provider_init_db_command_spec(
+            default_db_path=default_db_path
+        ),
         build_market_data_provider_securities_command_spec(
             default_db_path=default_db_path
         ),

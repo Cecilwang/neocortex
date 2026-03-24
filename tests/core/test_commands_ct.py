@@ -239,7 +239,9 @@ def test_dispatcher_can_be_used_without_cli_transport() -> None:
     )
     dispatcher = CommandDispatcher()
 
-    result = dispatcher.dispatch(ParsedInvocation(spec=matched_spec, args=args), context)
+    result = dispatcher.dispatch(
+        ParsedInvocation(spec=matched_spec, args=args), context
+    )
 
     assert result.presentation.text == "feishu:alpha:1:False:0"
 

@@ -1751,24 +1751,26 @@ def test_cli_sync_bars_supports_multiple_values_after_one_ticker_flag(
         "find_security_ids_by_name",
         lambda **kwargs: (
             (
-                SecurityId(
-                    symbol="002460",
-                    market=Market.CN,
-                    exchange=Exchange.XSHE,
+                (
+                    SecurityId(
+                        symbol="002460",
+                        market=Market.CN,
+                        exchange=Exchange.XSHE,
+                    ),
+                    "赣锋",
                 ),
-                "赣锋",
-            ),
-        )
-        if kwargs["name"] == "赣锋"
-        else (
-            (
-                SecurityId(
-                    symbol="002466",
-                    market=Market.CN,
-                    exchange=Exchange.XSHE,
+            )
+            if kwargs["name"] == "赣锋"
+            else (
+                (
+                    SecurityId(
+                        symbol="002466",
+                        market=Market.CN,
+                        exchange=Exchange.XSHE,
+                    ),
+                    "天齐",
                 ),
-                "天齐",
-            ),
+            )
         ),
     )
 

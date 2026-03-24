@@ -216,7 +216,9 @@ def build_connector_command_specs(
                 f"Running connector profile command: connector={_source_name} security={security_id.ticker}"
             )
             connector = _connector_for_name(_source_name, args)
-            return CommandResult.json(connector.get_security_profile_snapshot(security_id))
+            return CommandResult.json(
+                connector.get_security_profile_snapshot(security_id)
+            )
 
         build_spec(
             "profile",

@@ -239,9 +239,7 @@ class CommandRegistry:
         parser_nodes: dict[tuple[str, ...], argparse.ArgumentParser] = {}
         nested_subparsers: dict[
             tuple[str, ...], argparse._SubParsersAction[argparse.ArgumentParser]
-        ] = {
-            (): subcommands
-        }
+        ] = {(): subcommands}
         for spec in self.list():
             prefix: tuple[str, ...] = ()
             for index, part in enumerate(spec.id):
