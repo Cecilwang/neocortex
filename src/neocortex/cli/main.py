@@ -4,8 +4,18 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from typing import Sequence
 
+from neocortex.commands import (
+    CommandActor,
+    CommandHelpRequested,
+    CommandContext,
+    CommandServices,
+    CommandUsageError,
+    InvocationSource,
+    build_command_registry,
+)
 from neocortex.config import get_config, load_dotenv, reset_config_cache
 from neocortex.log import configure_logging
 
@@ -15,12 +25,13 @@ from neocortex.cli.db import add_db_commands
 from neocortex.cli.feishu import add_feishu_commands
 from neocortex.cli.indicator import add_indicator_commands
 from neocortex.cli.market_data import add_market_data_provider_commands
+from neocortex.cli.render import render_command_result
 from neocortex.cli.sync import add_sync_commands
 
 logger = logging.getLogger(__name__)
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_legacy_parser() -> argparse.ArgumentParser:
     app_config = get_config()
     parser = argparse.ArgumentParser(prog="neocortex")
     parser.add_argument("--env-file", default=None)
@@ -56,9 +67,57 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_parser() -> argparse.ArgumentParser:
+    """Return the current legacy parser during mixed-mode migration."""
+
+    return build_legacy_parser()
+
+
+def _build_bootstrap_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--env-file", default=None)
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+    )
+    return parser
+
+
+def _run_cli_registry_command(
+    command_tokens: Sequence[str],
+    *,
+    log_level: str,
+    registry,
+) -> int:
+    configure_logging(log_level)
+    root_command = command_tokens[0] if command_tokens else None
+    logger.info(f"CLI dispatch selected registry path: root_command={root_command}")
+    context = CommandContext(
+        actor=CommandActor(
+            source=InvocationSource.CLI,
+            user_id="cli",
+            is_admin=True,
+        ),
+        config=get_config(),
+        services=CommandServices(),
+        request_id="cli",
+    )
+    try:
+        result = registry.run(tuple(command_tokens), context)
+    except CommandHelpRequested as exc:
+        print(exc.help_text, end="")
+        return 0
+    except CommandUsageError as exc:
+        print(exc.message, file=sys.stderr)
+        if exc.help_text:
+            print(exc.help_text, file=sys.stderr, end="")
+        return exc.status
+    return render_command_result(result)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    bootstrap = argparse.ArgumentParser(add_help=False)
-    bootstrap.add_argument("--env-file", default=None)
+    bootstrap = _build_bootstrap_parser()
     bootstrap_args, _ = bootstrap.parse_known_args(argv)
     if bootstrap_args.env_file is None:
         loaded = load_dotenv(override=True)
@@ -66,9 +125,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         loaded = load_dotenv(bootstrap_args.env_file, override=True)
     if loaded:
         reset_config_cache()
-    parser = build_parser()
+    _, command_tokens = bootstrap.parse_known_args(argv)
+    registry = build_command_registry()
+    # Temporary mixed-mode split: registry-managed roots opt into the new kernel
+    # while all remaining roots still flow through legacy argparse wiring.
+    root_command = command_tokens[0] if command_tokens else None
+    if registry.manages_root(root_command):
+        return _run_cli_registry_command(
+            command_tokens,
+            log_level=bootstrap_args.log_level,
+            registry=registry,
+        )
+    parser = build_legacy_parser()
     args = parser.parse_args(argv)
     configure_logging(args.log_level)
+    logger.info(
+        f"CLI dispatch selected legacy path: domain={getattr(args, 'domain', None)}"
+    )
     logger.info(
         f"CLI parsed command: domain={getattr(args, 'domain', None)} "
         f"command={getattr(args, 'command', None)}"
