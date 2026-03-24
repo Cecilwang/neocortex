@@ -86,9 +86,13 @@ def resolve_date_range(
     if resolved_start_date > resolved_end_date:
         raise ValueError("start_date cannot be later than end_date.")
     if start_date != resolved_start_date:
-        logger.info(f"Resolved default start_date to {resolved_start_date} based on end_date {resolved_end_date}.")
+        logger.info(
+            f"Resolved default start_date to {resolved_start_date} based on end_date {resolved_end_date}."
+        )
     if end_date != resolved_end_date:
-        logger.info(f"Resolved default end_date to {resolved_end_date} based on start_date {resolved_start_date}.")
+        logger.info(
+            f"Resolved default end_date to {resolved_end_date} based on start_date {resolved_start_date}."
+        )
     return resolved_start_date, resolved_end_date
 
 
