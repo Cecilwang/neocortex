@@ -23,9 +23,7 @@ from neocortex.cli.agent import add_agent_commands
 from neocortex.cli.connector import add_connector_commands
 from neocortex.cli.feishu import add_feishu_commands
 from neocortex.cli.indicator import add_indicator_commands
-from neocortex.cli.market_data import add_market_data_provider_commands
 from neocortex.cli.render import render_command_result
-from neocortex.cli.sync import add_sync_commands
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +40,6 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="domain", required=True)
 
     add_connector_commands(subcommands)
-    add_sync_commands(
-        subcommands,
-        default_db_path=str(app_config.storage.market_data_db_path),
-    )
-    add_market_data_provider_commands(
-        subcommands,
-        default_db_path=str(app_config.storage.market_data_db_path),
-    )
     add_indicator_commands(
         subcommands,
         default_db_path=str(app_config.storage.market_data_db_path),
@@ -127,10 +117,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Temporary mixed-mode split: registry-managed command paths opt into the new
     # kernel while all remaining paths still flow through legacy argparse wiring.
     matched_command = registry.match_command(command_tokens)
-    if matched_command is not None:
+    root_command = command_tokens[0] if command_tokens else None
+    if matched_command is not None or registry.manages_root(root_command):
         return _run_cli_registry_command(
             command_tokens,
-            command_id=matched_command,
+            command_id=matched_command or (root_command,),
             log_level=bootstrap_args.log_level,
             registry=registry,
         )

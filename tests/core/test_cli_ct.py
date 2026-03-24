@@ -102,6 +102,8 @@ class FakeProvider:
     def __init__(self) -> None:
         self.last_profile_security_id: SecurityId | None = None
         self.last_bars_call: tuple[SecurityId, date, date, str | None] | None = None
+        self.last_disclosures_call: tuple[SecurityId, date] | None = None
+        self.last_macro_call: tuple[Market, date] | None = None
         self.list_securities_calls: list[Market] = []
         self.bar_calls: list[tuple[SecurityId, date, date, str | None]] = []
         self.trading_dates_calls: list[tuple[Market, date, date]] = []
@@ -161,9 +163,11 @@ class FakeProvider:
         return [{"symbol": security_id.symbol, "as_of_date": as_of_date.isoformat()}]
 
     def get_disclosure_sections(self, security_id: SecurityId, *, as_of_date: date):
+        self.last_disclosures_call = (security_id, as_of_date)
         return [{"symbol": security_id.symbol, "as_of_date": as_of_date.isoformat()}]
 
     def get_macro_points(self, *, market: Market, as_of_date: date):
+        self.last_macro_call = (market, as_of_date)
         return [{"market": market.value, "as_of_date": as_of_date.isoformat()}]
 
     def get_trading_dates(
@@ -953,9 +957,9 @@ def test_cli_market_data_provider_init_db_creates_schema(tmp_path, capsys) -> No
     exit_code = cli.main(
         [
             "market-data-provider",
+            "init-db",
             "--db-path",
             str(db_path),
-            "init-db",
         ]
     )
 
@@ -971,6 +975,43 @@ def test_cli_market_data_provider_init_db_creates_schema(tmp_path, capsys) -> No
     assert "Initialized market data database" in capsys.readouterr().out
     assert "daily_price_bars" in tables
     assert "fetch_cache" not in tables
+
+
+def test_cli_market_data_provider_securities_uses_read_through_provider(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import market_data_provider as provider_commands
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        provider_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+
+    exit_code = cli.main(
+        [
+            "market-data-provider",
+            "securities",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+        ]
+    )
+
+    assert exit_code == 0
+    assert FakeProviderFactory.created_db_paths[-1] == "/tmp/market.sqlite3"
+    assert FakeProviderFactory.provider.list_securities_calls == [Market.CN]
+    output = capsys.readouterr().out
+    assert "symbol" in output
+    assert "market" in output
+    assert "exchange" in output
+    assert "600519" in output
+    assert "CN" in output
+    assert "XSHG" in output
 
 
 def test_cli_db_query_renders_table(tmp_path, capsys) -> None:
@@ -1016,11 +1057,11 @@ def test_cli_market_data_provider_profile_uses_read_through_provider(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1028,9 +1069,9 @@ def test_cli_market_data_provider_profile_uses_read_through_provider(
     exit_code = cli.main(
         [
             "market-data-provider",
+            "profile",
             "--db-path",
             "/tmp/market.sqlite3",
-            "profile",
             "--market",
             "CN",
             "--symbol",
@@ -1056,16 +1097,17 @@ def test_cli_market_data_provider_fundamentals_defaults_as_of_date_with_market_r
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex import date_resolution
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
     monkeypatch.setattr(
-        cli_common,
+        date_resolution,
         "default_end_date",
         lambda *, market, provider=None, now=None: date(2026, 3, 20),
     )
@@ -1073,9 +1115,9 @@ def test_cli_market_data_provider_fundamentals_defaults_as_of_date_with_market_r
     exit_code = cli.main(
         [
             "market-data-provider",
+            "fundamentals",
             "--db-path",
             "/tmp/market.sqlite3",
-            "fundamentals",
             "--market",
             "CN",
             "--symbol",
@@ -1093,11 +1135,11 @@ def test_cli_market_data_provider_bars_prints_normalized_price_bars(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1105,9 +1147,9 @@ def test_cli_market_data_provider_bars_prints_normalized_price_bars(
     exit_code = cli.main(
         [
             "market-data-provider",
+            "bars",
             "--db-path",
             "/tmp/market.sqlite3",
-            "bars",
             "--market",
             "CN",
             "--symbol",
@@ -1135,16 +1177,16 @@ def test_cli_market_data_provider_bars_prints_normalized_price_bars(
     assert "1528.0" in lines[-1]
 
 
-def test_cli_market_data_provider_trading_dates_supports_range_query(
+def test_cli_market_data_provider_disclosures_uses_read_through_provider(
     monkeypatch,
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1152,9 +1194,89 @@ def test_cli_market_data_provider_trading_dates_supports_range_query(
     exit_code = cli.main(
         [
             "market-data-provider",
+            "disclosures",
             "--db-path",
             "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+            "--symbol",
+            "600519",
+            "--exchange",
+            "XSHG",
+            "--as-of-date",
+            "2026-03-20",
+        ]
+    )
+
+    assert exit_code == 0
+    assert FakeProviderFactory.provider.last_disclosures_call == (
+        SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG),
+        date(2026, 3, 20),
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["as_of_date"] == "2026-03-20"
+
+
+def test_cli_market_data_provider_macro_defaults_as_of_date_with_market_rule(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex import date_resolution
+    from neocortex.commands import market_data_provider as provider_commands
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        provider_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+    monkeypatch.setattr(
+        date_resolution,
+        "default_end_date",
+        lambda *, market, provider=None, now=None: date(2026, 3, 20),
+    )
+
+    exit_code = cli.main(
+        [
+            "market-data-provider",
+            "macro",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+        ]
+    )
+
+    assert exit_code == 0
+    assert FakeProviderFactory.provider.last_macro_call == (
+        Market.CN,
+        date(2026, 3, 20),
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["as_of_date"] == "2026-03-20"
+
+
+def test_cli_market_data_provider_trading_dates_supports_range_query(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import market_data_provider as provider_commands
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        provider_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+
+    exit_code = cli.main(
+        [
+            "market-data-provider",
             "trading-dates",
+            "--db-path",
+            "/tmp/market.sqlite3",
             "--market",
             "CN",
             "--start-date",
@@ -1170,10 +1292,12 @@ def test_cli_market_data_provider_trading_dates_supports_range_query(
         date(2026, 3, 19),
         date(2026, 3, 20),
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["trade_date"] == "2026-03-19"
-    assert payload[0]["is_trading_day"] is True
-    assert payload[1]["trade_date"] == "2026-03-20"
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert "trade_date" in lines[0]
+    assert "is_trading_day" in lines[0]
+    assert "2026-03-19" in lines[1]
+    assert "True" in lines[1]
+    assert "2026-03-20" in lines[2]
 
 
 def test_cli_market_data_provider_trading_dates_supports_point_query(
@@ -1181,11 +1305,11 @@ def test_cli_market_data_provider_trading_dates_supports_point_query(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1193,9 +1317,9 @@ def test_cli_market_data_provider_trading_dates_supports_point_query(
     exit_code = cli.main(
         [
             "market-data-provider",
+            "trading-dates",
             "--db-path",
             "/tmp/market.sqlite3",
-            "trading-dates",
             "--market",
             "CN",
             "--date",
@@ -1209,26 +1333,26 @@ def test_cli_market_data_provider_trading_dates_supports_point_query(
         date(2026, 3, 21),
         date(2026, 3, 21),
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["trade_date"] == "2026-03-21"
-    assert payload["is_trading_day"] is False
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert "trade_date" in lines[0]
+    assert "2026-03-21" in lines[1]
+    assert "False" in lines[1]
 
 
 def test_cli_market_data_provider_trading_dates_rejects_future_date(
     monkeypatch,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
-    from neocortex.cli import market_data as market_data_cli
+    from neocortex.commands import market_data_provider as provider_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        provider_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
     monkeypatch.setattr(
-        market_data_cli,
+        provider_commands,
         "date",
         type("FakeDate", (), {"today": staticmethod(lambda: date(2026, 3, 20))}),
     )
@@ -1237,9 +1361,9 @@ def test_cli_market_data_provider_trading_dates_rejects_future_date(
         cli.main(
             [
                 "market-data-provider",
+                "trading-dates",
                 "--db-path",
                 "/tmp/market.sqlite3",
-                "trading-dates",
                 "--market",
                 "CN",
                 "--date",
@@ -1257,17 +1381,16 @@ def test_cli_sync_trading_dates_uses_fixed_cn_full_range(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
-    from neocortex.cli import sync as sync_cli
+    from neocortex.commands import sync as sync_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        sync_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
     monkeypatch.setattr(
-        sync_cli,
+        sync_commands,
         "date",
         type("FakeDate", (), {"today": staticmethod(lambda: date(2026, 3, 20))}),
     )
@@ -1275,9 +1398,9 @@ def test_cli_sync_trading_dates_uses_fixed_cn_full_range(
     exit_code = cli.main(
         [
             "sync",
+            "trading-dates",
             "--db-path",
             "/tmp/market.sqlite3",
-            "trading-dates",
         ]
     )
 
@@ -1340,11 +1463,11 @@ def test_cli_sync_securities_returns_summary(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import sync as sync_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        sync_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1352,9 +1475,9 @@ def test_cli_sync_securities_returns_summary(
     exit_code = cli.main(
         [
             "sync",
+            "securities",
             "--db-path",
             "/tmp/market.sqlite3",
-            "securities",
             "--market",
             "CN",
         ]
@@ -1373,11 +1496,11 @@ def test_cli_sync_bars_supports_single_security(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import sync as sync_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        sync_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1385,9 +1508,9 @@ def test_cli_sync_bars_supports_single_security(
     exit_code = cli.main(
         [
             "sync",
+            "bars",
             "--db-path",
             "/tmp/market.sqlite3",
-            "bars",
             "--market",
             "CN",
             "--symbol",
@@ -1420,11 +1543,11 @@ def test_cli_sync_bars_supports_ticker_collection(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import sync as sync_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        sync_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -1432,9 +1555,9 @@ def test_cli_sync_bars_supports_ticker_collection(
     exit_code = cli.main(
         [
             "sync",
+            "bars",
             "--db-path",
             "/tmp/market.sqlite3",
-            "bars",
             "--market",
             "CN",
             "--ticker",
@@ -1473,16 +1596,17 @@ def test_cli_sync_bars_supports_fuzzy_name_in_ticker_collection(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import sync as sync_commands
+    from neocortex import security_resolution
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        sync_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
     monkeypatch.setattr(
-        cli_common,
+        security_resolution,
         "find_security_ids_by_name",
         lambda **kwargs: (
             (
@@ -1499,9 +1623,9 @@ def test_cli_sync_bars_supports_fuzzy_name_in_ticker_collection(
     exit_code = cli.main(
         [
             "sync",
+            "bars",
             "--db-path",
             "/tmp/market.sqlite3",
-            "bars",
             "--market",
             "CN",
             "--ticker",
@@ -1525,6 +1649,84 @@ def test_cli_sync_bars_supports_fuzzy_name_in_ticker_collection(
     payload = json.loads(capsys.readouterr().out)
     assert payload["synced_security_count"] == 1
     assert payload["tickers"] == ["CN:688981"]
+
+
+def test_cli_sync_bars_supports_multiple_values_after_one_ticker_flag(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import sync as sync_commands
+    from neocortex import security_resolution
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        sync_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+    monkeypatch.setattr(
+        security_resolution,
+        "find_security_ids_by_name",
+        lambda **kwargs: (
+            (
+                SecurityId(
+                    symbol="002460",
+                    market=Market.CN,
+                    exchange=Exchange.XSHE,
+                ),
+                "赣锋",
+            ),
+        )
+        if kwargs["name"] == "赣锋"
+        else (
+            (
+                SecurityId(
+                    symbol="002466",
+                    market=Market.CN,
+                    exchange=Exchange.XSHE,
+                ),
+                "天齐",
+            ),
+        ),
+    )
+
+    exit_code = cli.main(
+        [
+            "sync",
+            "bars",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+            "--ticker",
+            "赣锋",
+            "天齐",
+            "--start-date",
+            "2026-03-14",
+            "--end-date",
+            "2026-03-15",
+        ]
+    )
+
+    assert exit_code == 0
+    assert FakeProviderFactory.provider.bar_calls == [
+        (
+            SecurityId(symbol="002460", market=Market.CN, exchange=Exchange.XSHE),
+            date(2026, 3, 14),
+            date(2026, 3, 15),
+            None,
+        ),
+        (
+            SecurityId(symbol="002466", market=Market.CN, exchange=Exchange.XSHE),
+            date(2026, 3, 14),
+            date(2026, 3, 15),
+            None,
+        ),
+    ]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["synced_security_count"] == 2
+    assert payload["tickers"] == ["CN:002460", "CN:002466"]
 
 
 def test_cli_agent_render_outputs_text_when_requested(monkeypatch, capsys) -> None:

@@ -216,6 +216,7 @@ class CommandRegistry:
 
     def __init__(self) -> None:
         self._specs: dict[tuple[str, ...], CommandSpec] = {}
+        self._managed_roots: set[str] = set()
 
     def register(self, spec: CommandSpec) -> None:
         if spec.id in self._specs:
@@ -236,9 +237,13 @@ class CommandRegistry:
         # Temporary mixed-mode CLI bridge. Remove once all roots are registry-managed.
         return tuple(sorted({command_id[0] for command_id in self._specs}))
 
+    def mark_root_managed(self, root: str) -> None:
+        # Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
+        self._managed_roots.add(root)
+
     def manages_root(self, root: str | None) -> bool:
         # Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
-        return root in {command_id[0] for command_id in self._specs}
+        return root in self._managed_roots
 
     def match_command(
         self, tokens: list[str] | tuple[str, ...]

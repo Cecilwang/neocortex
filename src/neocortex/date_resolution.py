@@ -1,25 +1,15 @@
-"""Shared CLI helpers."""
+"""Shared date parsing and market-aware default date helpers."""
 
 from __future__ import annotations
 
 import argparse
 from datetime import date, datetime, time
 import logging
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from neocortex.config import get_config
 from neocortex.market_data_provider import ReadThroughMarketDataProvider
-from neocortex.models import Market, SecurityId
-from neocortex.security_resolution import (
-    add_security_identity_arguments as _add_security_identity_arguments,
-    find_security_ids_by_name as _find_security_ids_by_name,
-    build_security_id_for_market as _build_security_id_for_market,
-    parse_ticker as _parse_ticker,
-    resolve_ticker_or_name as _resolve_ticker_or_name,
-    resolve_security_id as _resolve_security_id,
-    resolve_exchange,
-)
+from neocortex.models import Market
+
 
 logger = logging.getLogger(__name__)
 _BEIJING_TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -94,11 +84,11 @@ def resolve_date_range(
         raise ValueError("start_date cannot be later than end_date.")
     if start_date != resolved_start_date:
         logger.info(
-            f"Resolved default start_date to {resolved_start_date} based on end_date {resolved_end_date}."
+            f"Resolved default start_date from {start_date} to {resolved_start_date}."
         )
     if end_date != resolved_end_date:
         logger.info(
-            f"Resolved default end_date to {resolved_end_date} based on start_date {resolved_start_date}."
+            f"Resolved default end_date from {end_date} to {resolved_end_date}."
         )
     return resolved_start_date, resolved_end_date
 
@@ -150,70 +140,3 @@ def add_as_of_date_argument(parser: argparse.ArgumentParser) -> None:
             "18:30 on trading days; otherwise the previous trading day."
         ),
     )
-
-
-def add_security_identity_arguments(parser: argparse.ArgumentParser) -> None:
-    _add_security_identity_arguments(parser)
-
-
-def find_security_ids_by_name(*, name: str, market: Market, db_path: str | Path):
-    return _find_security_ids_by_name(name=name, market=market, db_path=db_path)
-
-
-def resolve_security_id(args: argparse.Namespace) -> SecurityId:
-    return _resolve_security_id(args)
-
-
-def build_security_id(args: argparse.Namespace) -> SecurityId:
-    if not args.symbol:
-        raise ValueError("--symbol is required when resolving a security by symbol.")
-    return SecurityId(
-        symbol=args.symbol,
-        market=Market(args.market),
-        exchange=resolve_exchange(
-            symbol=args.symbol,
-            exchange=args.exchange,
-            market=Market(args.market),
-        ),
-    )
-
-
-def build_security_id_for_market(
-    *,
-    symbol: str,
-    exchange: str | None,
-    market: Market,
-) -> SecurityId:
-    return _build_security_id_for_market(
-        symbol=symbol,
-        exchange=exchange,
-        market=market,
-    )
-
-
-def parse_ticker(value: str, *, market: Market) -> SecurityId:
-    return _parse_ticker(
-        value,
-        market=market,
-    )
-
-
-def resolve_ticker_or_name(
-    value: str,
-    *,
-    market: Market,
-    db_path: str | Path | None = None,
-) -> SecurityId:
-    return _resolve_ticker_or_name(
-        value,
-        market=market,
-        db_path=db_path or get_config().storage.market_data_db_path,
-    )
-
-
-def market_data_db_path(args: argparse.Namespace) -> str:
-    return str(getattr(args, "db_path", get_config().storage.market_data_db_path))
-
-
-def market_data_provider(args: argparse.Namespace) -> ReadThroughMarketDataProvider:
-    return ReadThroughMarketDataProvider.from_defaults(market_data_db_path(args))

@@ -104,6 +104,38 @@ def test_cli_registry_help_returns_zero(monkeypatch, capsys) -> None:
     assert captured.err == ""
 
 
+def test_cli_fully_managed_root_help_uses_registry(monkeypatch, capsys) -> None:
+    from neocortex import cli
+
+    parser_cli = importlib.import_module("neocortex.cli.main")
+    registry = CommandRegistry()
+    registry.register(
+        CommandSpec(
+            id=("demo", "run"),
+            summary="Run registry command.",
+            description="Run registry command.",
+            exposure=Exposure.SHARED,
+            auth=AuthPolicy.PUBLIC,
+            execution=ExecutionMode.SYNC,
+            configure_parser=lambda parser: parser.add_argument("target"),
+            handler=_demo_handler,
+        )
+    )
+    registry.mark_root_managed("demo")
+    monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
+    monkeypatch.setattr(
+        parser_cli, "load_dotenv", lambda path=None, override=False: False
+    )
+    monkeypatch.setattr(parser_cli, "configure_logging", lambda level: None)
+
+    exit_code = cli.main(["demo", "--help"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "run" in captured.out
+    assert captured.err == ""
+
+
 def test_cli_registry_usage_error_returns_two(monkeypatch, capsys) -> None:
     from neocortex import cli
 

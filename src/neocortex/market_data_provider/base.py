@@ -263,6 +263,6 @@ def resolve_effective_daily_range(
         )
         return start_date, end_date
     logger.info(
-        f"Effective daily range resolved: source={source_name} market={market.value} requested_start={start_date} requested_end={end_date} effective_start={effective_start_date} effective_end={effective_end_date}"
+        f"Resolved daily range from [{start_date} {end_date}] to [{effective_start_date} {effective_end_date}]"
     )
     return effective_start_date, effective_end_date

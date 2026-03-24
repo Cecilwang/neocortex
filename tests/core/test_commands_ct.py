@@ -226,7 +226,7 @@ def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
         result = dispatcher.dispatch(invocation, admin_context)
 
     assert result.presentation.text == "cli:alpha:1:False:0"
-    assert "command_id=demo run" in caplog.text
+    assert "Dispatching [demo run]" in caplog.text
     assert "execution=async" in caplog.text
 
 
@@ -260,5 +260,5 @@ def test_command_registry_logs_decisions_without_raw_tokens(caplog) -> None:
     with caplog.at_level("INFO"):
         registry.run(("demo", "run", "secret-symbol"), context)
 
-    assert "command_id=demo run" in caplog.text
+    assert "Dispatching [demo run]" in caplog.text
     assert "secret-symbol" not in caplog.text

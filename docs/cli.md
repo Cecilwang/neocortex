@@ -155,7 +155,7 @@ uv run python -m neocortex market-data-provider trading-dates \
 `sync bars` 必须且只能选择一种目标模式：
 
 - `--symbol` / `--name`
-- `--ticker`（可重复；既支持 `<symbol>.<exchange>`，也支持名称模糊搜索）
+- `--ticker`（可重复；单次也可跟多个值；既支持 `<symbol>.<exchange>`，也支持名称模糊搜索）
 - `--all-securities`
 
 同步证券列表：
@@ -181,6 +181,16 @@ uv run python -m neocortex sync bars \
   --market CN \
   --ticker 600519.XSHG \
   --ticker 000001.XSHE \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-20
+```
+
+也可以在一个 `--ticker` 后面直接跟多个值：
+
+```bash
+uv run python -m neocortex sync bars \
+  --market CN \
+  --ticker 赣锋 天齐 \
   --start-date 2026-03-01 \
   --end-date 2026-03-20
 ```
