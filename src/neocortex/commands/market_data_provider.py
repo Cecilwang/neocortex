@@ -33,6 +33,21 @@ from neocortex.storage import MarketDataStore
 logger = logging.getLogger(__name__)
 
 
+def _normalize_cell_value(value: object) -> object:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _dataframe_columns_and_rows(frame) -> tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]:
+    columns = tuple(str(column) for column in frame.columns)
+    rows = tuple(
+        tuple(_normalize_cell_value(value) for value in row)
+        for row in frame.itertuples(index=False, name=None)
+    )
+    return columns, rows
+
+
 def build_market_data_provider_init_db_command_spec(
     *,
     default_db_path: str,
@@ -80,16 +95,18 @@ def build_market_data_provider_securities_command_spec(
         logger.info(f"Running provider securities command: market={args.market}")
         provider = ReadThroughMarketDataProvider.from_defaults(args.db_path)
         securities = provider.list_securities(market=Market(args.market))
+        rows = tuple(
+            (
+                security_id.symbol,
+                security_id.market.value,
+                security_id.exchange.value,
+            )
+            for security_id in securities
+        )
         return CommandResult.table(
             columns=("symbol", "market", "exchange"),
-            rows=tuple(
-                (
-                    security_id.symbol,
-                    security_id.market.value,
-                    security_id.exchange.value,
-                )
-                for security_id in securities
-            ),
+            rows=rows,
+            payload=securities,
         )
 
     return CommandSpec(
@@ -140,7 +157,12 @@ def build_market_data_provider_bars_command_spec(
             end_date=end_date,
             adjust=args.adjust,
         )
-        return CommandResult.text(bars.bars.to_string(index=False), payload=bars)
+        columns, rows = _dataframe_columns_and_rows(bars.bars)
+        return CommandResult.table(
+            columns=columns,
+            rows=rows,
+            payload=bars,
+        )
 
     return CommandSpec(
         id=("market-data-provider", "bars"),
@@ -384,4 +406,30 @@ def build_market_data_provider_trading_dates_command_spec(
         execution=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
+    )
+
+
+def build_market_data_provider_command_specs(
+    *,
+    default_db_path: str,
+) -> tuple[CommandSpec, ...]:
+    return (
+        build_market_data_provider_init_db_command_spec(default_db_path=default_db_path),
+        build_market_data_provider_securities_command_spec(
+            default_db_path=default_db_path
+        ),
+        build_market_data_provider_bars_command_spec(default_db_path=default_db_path),
+        build_market_data_provider_fundamentals_command_spec(
+            default_db_path=default_db_path
+        ),
+        build_market_data_provider_profile_command_spec(
+            default_db_path=default_db_path
+        ),
+        build_market_data_provider_disclosures_command_spec(
+            default_db_path=default_db_path
+        ),
+        build_market_data_provider_macro_command_spec(default_db_path=default_db_path),
+        build_market_data_provider_trading_dates_command_spec(
+            default_db_path=default_db_path
+        ),
     )

@@ -5,6 +5,7 @@ import pytest
 from neocortex.commands import (
     AuthPolicy,
     CommandActor,
+    CommandArgumentParser,
     CommandHelpRequested,
     CommandContext,
     CommandDispatcher,
@@ -15,6 +16,7 @@ from neocortex.commands import (
     ExecutionMode,
     Exposure,
     InvocationSource,
+    ParsedInvocation,
 )
 
 
@@ -94,28 +96,34 @@ def _get_named_subparser(
     raise AssertionError(f"Subparser {name!r} not found")
 
 
+def _build_registry_parser(registry: CommandRegistry) -> CommandArgumentParser:
+    parser = CommandArgumentParser(prog="neocortex")
+    subcommands = parser.add_subparsers(dest="_command_root", required=True)
+    registry.bind_subcommands(subcommands)
+    return parser
+
+
+def _parse_invocation(
+    registry: CommandRegistry,
+    tokens: list[str] | tuple[str, ...],
+) -> tuple[CommandSpec, argparse.Namespace]:
+    parser = _build_registry_parser(registry)
+    args = parser.parse_args(tokens)
+    spec = getattr(args, "_command_spec", None)
+    if not isinstance(spec, CommandSpec):
+        raise RuntimeError(
+            "Registry parser returned successfully without a bound command spec."
+        )
+    return spec, args
+
+
 def test_command_registry_registers_and_lists_specs() -> None:
     registry = CommandRegistry()
     spec = _demo_spec()
 
     registry.register(spec)
 
-    assert registry.root_commands() == ("demo",)
     assert registry.list() == (spec,)
-
-
-def test_registry_match_command_returns_longest_registered_path() -> None:
-    registry = CommandRegistry()
-    registry.register(
-        _inspect_spec(("demo",), description="Leaf description for demo.")
-    )
-    registry.register(
-        _inspect_spec(("demo", "run"), description="Leaf description for demo run.")
-    )
-
-    assert registry.match_command(("demo", "run", "alpha")) == ("demo", "run")
-    assert registry.match_command(("demo", "--help")) == ("demo",)
-    assert registry.match_command(("unknown", "run")) is None
 
 
 def test_registry_parser_builds_namespace_from_argparse_spec() -> None:
@@ -123,7 +131,8 @@ def test_registry_parser_builds_namespace_from_argparse_spec() -> None:
     spec = _demo_spec()
     registry.register(spec)
 
-    invocation = registry.parse(
+    _, args = _parse_invocation(
+        registry,
         [
             "demo",
             "run",
@@ -135,22 +144,23 @@ def test_registry_parser_builds_namespace_from_argparse_spec() -> None:
             "cn",
             "--label",
             "growth",
-        ]
+        ],
     )
 
-    assert invocation.args.target == "alpha"
-    assert invocation.args.count == 2
-    assert invocation.args.verbose is True
-    assert invocation.args.labels == ["cn", "growth"]
+    assert args.target == "alpha"
+    assert args.count == 2
+    assert args.verbose is True
+    assert args.labels == ["cn", "growth"]
 
 
 def test_registry_parser_uses_argparse_validation() -> None:
     registry = CommandRegistry()
     spec = _demo_spec(require_target_source=True)
     registry.register(spec)
+    parser = _build_registry_parser(registry)
 
     with pytest.raises(CommandUsageError) as exc_info:
-        registry.parse(["demo", "run", "alpha"])
+        parser.parse_args(["demo", "run", "alpha"])
 
     assert exc_info.value.status == 2
     assert "one of the arguments --symbol --name is required" in exc_info.value.message
@@ -162,7 +172,7 @@ def test_registry_parser_formats_help_through_argparse() -> None:
     spec = _demo_spec()
     registry.register(spec)
 
-    parser = registry.build_parser()
+    parser = _build_registry_parser(registry)
 
     with pytest.raises(CommandHelpRequested) as exc_info:
         parser.parse_args(["demo", "run", "--help"])
@@ -179,28 +189,10 @@ def test_registry_build_parser_keeps_group_parser_description_empty() -> None:
         _inspect_spec(("demo", "show"), description="Leaf description for demo show.")
     )
 
-    parser = registry.build_parser()
+    parser = _build_registry_parser(registry)
     group_parser = _get_named_subparser(parser, "demo")
 
     assert group_parser.description is None
-
-
-def test_registry_build_parser_returns_fresh_parser_instances() -> None:
-    registry = CommandRegistry()
-    registry.register(_demo_spec())
-
-    first_parser = registry.build_parser()
-    second_parser = registry.build_parser()
-
-    assert first_parser is not second_parser
-
-    registry.register(
-        _inspect_spec(("demo", "show"), description="Leaf description for demo show.")
-    )
-
-    third_parser = registry.build_parser()
-
-    assert third_parser is not second_parser
 
 
 def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
@@ -210,7 +202,7 @@ def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
         execution=ExecutionMode.ASYNC,
     )
     registry.register(spec)
-    invocation = registry.parse(["demo", "run", "alpha"])
+    matched_spec, args = _parse_invocation(registry, ["demo", "run", "alpha"])
     dispatcher = CommandDispatcher()
     user_context = CommandContext(
         actor=CommandActor(source=InvocationSource.FEISHU, is_admin=False)
@@ -218,6 +210,7 @@ def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
     admin_context = CommandContext(
         actor=CommandActor(source=InvocationSource.CLI, is_admin=True)
     )
+    invocation = ParsedInvocation(spec=matched_spec, args=args)
 
     with pytest.raises(PermissionError):
         dispatcher.dispatch(invocation, user_context)
@@ -230,9 +223,10 @@ def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
     assert "execution=async" in caplog.text
 
 
-def test_command_registry_run_shares_parse_and_dispatch_without_cli() -> None:
+def test_dispatcher_can_be_used_without_cli_transport() -> None:
     registry = CommandRegistry()
     registry.register(_demo_spec())
+    matched_spec, args = _parse_invocation(registry, ("demo", "run", "alpha"))
     context = CommandContext(
         actor=CommandActor(
             source=InvocationSource.FEISHU,
@@ -243,8 +237,9 @@ def test_command_registry_run_shares_parse_and_dispatch_without_cli() -> None:
         ),
         request_id="feishu",
     )
+    dispatcher = CommandDispatcher()
 
-    result = registry.run(("demo", "run", "alpha"), context)
+    result = dispatcher.dispatch(ParsedInvocation(spec=matched_spec, args=args), context)
 
     assert result.presentation.text == "feishu:alpha:1:False:0"
 
@@ -252,13 +247,15 @@ def test_command_registry_run_shares_parse_and_dispatch_without_cli() -> None:
 def test_command_registry_logs_decisions_without_raw_tokens(caplog) -> None:
     registry = CommandRegistry()
     registry.register(_demo_spec())
+    matched_spec, args = _parse_invocation(registry, ("demo", "run", "secret-symbol"))
     context = CommandContext(
         actor=CommandActor(source=InvocationSource.CLI, is_admin=True),
         request_id="cli",
     )
+    dispatcher = CommandDispatcher()
 
     with caplog.at_level("INFO"):
-        registry.run(("demo", "run", "secret-symbol"), context)
+        dispatcher.dispatch(ParsedInvocation(spec=matched_spec, args=args), context)
 
     assert "Dispatching [demo run]" in caplog.text
     assert "secret-symbol" not in caplog.text

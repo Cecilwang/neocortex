@@ -64,3 +64,7 @@ def build_db_query_command_spec(*, default_db_path: str) -> CommandSpec:
         configure_parser=configure_parser,
         handler=handler,
     )
+
+
+def build_db_command_specs(*, default_db_path: str) -> tuple[CommandSpec, ...]:
+    return (build_db_query_command_spec(default_db_path=default_db_path),)

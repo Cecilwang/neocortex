@@ -9,46 +9,27 @@ from typing import Sequence
 
 from neocortex.commands import (
     CommandActor,
+    CommandArgumentParser,
     CommandHelpRequested,
     CommandContext,
+    CommandDispatcher,
     CommandServices,
+    CommandSpec,
     CommandUsageError,
     InvocationSource,
+    ParsedInvocation,
     build_command_registry,
 )
 from neocortex.config import get_config, load_dotenv, reset_config_cache
 from neocortex.log import configure_logging
 
-from neocortex.cli.connector import add_connector_commands
-from neocortex.cli.feishu import add_feishu_commands
 from neocortex.cli.render import render_command_result
 
 logger = logging.getLogger(__name__)
 
 
-def build_legacy_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="neocortex")
-    parser.add_argument("--env-file", default=None)
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
-    )
-    subcommands = parser.add_subparsers(dest="domain", required=True)
-
-    add_connector_commands(subcommands)
-    add_feishu_commands(subcommands)
-    return parser
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """Return the current legacy parser during mixed-mode migration."""
-
-    return build_legacy_parser()
-
-
-def _build_bootstrap_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
+def build_base_parser() -> CommandArgumentParser:
+    parser = CommandArgumentParser(prog="neocortex", add_help=False)
     parser.add_argument("--env-file", default=None)
     parser.add_argument(
         "--log-level",
@@ -58,17 +39,24 @@ def _build_bootstrap_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_cli_registry_command(
-    command_tokens: Sequence[str],
+def _finalize_parser(
+    parser: CommandArgumentParser,
     *,
-    command_id: tuple[str, ...],
-    log_level: str,
     registry,
+) -> None:
+    parser.add_argument("-h", "--help", action="help")
+    subcommands = parser.add_subparsers(dest="_command_root", required=True)
+    registry.bind_subcommands(subcommands)
+
+
+def _dispatch_cli_command(
+    args: argparse.Namespace,
 ) -> int:
-    configure_logging(log_level)
-    logger.debug(
-        f"CLI dispatch selected registry path: command_id={' '.join(command_id)}"
-    )
+    spec = getattr(args, "_command_spec", None)
+    if not isinstance(spec, CommandSpec):
+        raise RuntimeError("CLI parser returned without a bound command spec.")
+    configure_logging(args.log_level)
+    logger.debug(f"CLI dispatch selected registry path: command_id={spec.path}")
     context = CommandContext(
         actor=CommandActor(
             source=InvocationSource.CLI,
@@ -79,8 +67,27 @@ def _run_cli_registry_command(
         services=CommandServices(),
         request_id="cli",
     )
+    dispatcher = CommandDispatcher()
+    result = dispatcher.dispatch(
+        ParsedInvocation(spec=spec, args=args),
+        context,
+    )
+    return render_command_result(result)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_base_parser()
+    bootstrap_args, _ = parser.parse_known_args(argv)
+    if bootstrap_args.env_file is None:
+        loaded = load_dotenv(override=True)
+    else:
+        loaded = load_dotenv(bootstrap_args.env_file, override=True)
+    if loaded:
+        reset_config_cache()
+    registry = build_command_registry()
+    _finalize_parser(parser, registry=registry)
     try:
-        result = registry.run(tuple(command_tokens), context)
+        args = parser.parse_args(argv)
     except CommandHelpRequested as exc:
         print(exc.help_text, end="")
         return 0
@@ -89,39 +96,4 @@ def _run_cli_registry_command(
         if exc.help_text:
             print(exc.help_text, file=sys.stderr, end="")
         return exc.status
-    return render_command_result(result)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    bootstrap = _build_bootstrap_parser()
-    bootstrap_args, _ = bootstrap.parse_known_args(argv)
-    if bootstrap_args.env_file is None:
-        loaded = load_dotenv(override=True)
-    else:
-        loaded = load_dotenv(bootstrap_args.env_file, override=True)
-    if loaded:
-        reset_config_cache()
-    _, command_tokens = bootstrap.parse_known_args(argv)
-    registry = build_command_registry()
-    # Temporary mixed-mode split: registry-managed command paths opt into the new
-    # kernel while all remaining paths still flow through legacy argparse wiring.
-    matched_command = registry.match_command(command_tokens)
-    root_command = command_tokens[0] if command_tokens else None
-    if matched_command is not None or registry.manages_root(root_command):
-        return _run_cli_registry_command(
-            command_tokens,
-            command_id=matched_command or (root_command,),
-            log_level=bootstrap_args.log_level,
-            registry=registry,
-        )
-    parser = build_legacy_parser()
-    args = parser.parse_args(argv)
-    configure_logging(args.log_level)
-    logger.info(
-        f"CLI dispatch selected legacy path: domain={getattr(args, 'domain', None)}"
-    )
-    logger.info(
-        f"CLI parsed command: domain={getattr(args, 'domain', None)} "
-        f"command={getattr(args, 'command', None)}"
-    )
-    return args.handler(args)
+    return _dispatch_cli_command(args)

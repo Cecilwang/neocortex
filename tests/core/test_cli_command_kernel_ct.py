@@ -16,28 +16,6 @@ def _demo_handler(args: argparse.Namespace, context) -> CommandResult:
     return CommandResult.text(f"registry:{args.target}")
 
 
-def _legacy_show_handler(args: argparse.Namespace) -> int:
-    print(f"legacy:{args.target}")
-    return 0
-
-
-def _build_legacy_demo_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="neocortex")
-    parser.add_argument("--env-file", default=None)
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
-    )
-    subcommands = parser.add_subparsers(dest="domain", required=True)
-    demo_parser = subcommands.add_parser("demo")
-    demo_commands = demo_parser.add_subparsers(dest="command", required=True)
-    show_parser = demo_commands.add_parser("show")
-    show_parser.add_argument("target")
-    show_parser.set_defaults(handler=_legacy_show_handler)
-    return parser
-
-
 def test_cli_dispatches_registry_managed_root(monkeypatch, capsys) -> None:
     from neocortex import cli
 
@@ -121,18 +99,17 @@ def test_cli_fully_managed_root_help_uses_registry(monkeypatch, capsys) -> None:
             handler=_demo_handler,
         )
     )
-    registry.mark_root_managed("demo")
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
     monkeypatch.setattr(
         parser_cli, "load_dotenv", lambda path=None, override=False: False
     )
     monkeypatch.setattr(parser_cli, "configure_logging", lambda level: None)
 
-    exit_code = cli.main(["demo", "--help"])
+    exit_code = cli.main(["--help"])
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "run" in captured.out
+    assert "demo" in captured.out
     assert captured.err == ""
 
 
@@ -174,7 +151,9 @@ def test_cli_registry_usage_error_returns_two(monkeypatch, capsys) -> None:
     assert "usage: neocortex demo run" in captured.err
 
 
-def test_cli_dispatches_unmanaged_command_path_to_legacy(monkeypatch, capsys) -> None:
+def test_cli_unknown_subcommand_returns_registry_usage_error(
+    monkeypatch, capsys
+) -> None:
     from neocortex import cli
 
     parser_cli = importlib.import_module("neocortex.cli.main")
@@ -192,7 +171,6 @@ def test_cli_dispatches_unmanaged_command_path_to_legacy(monkeypatch, capsys) ->
         )
     )
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
-    monkeypatch.setattr(parser_cli, "build_legacy_parser", _build_legacy_demo_parser)
     monkeypatch.setattr(
         parser_cli, "load_dotenv", lambda path=None, override=False: False
     )
@@ -200,5 +178,7 @@ def test_cli_dispatches_unmanaged_command_path_to_legacy(monkeypatch, capsys) ->
 
     exit_code = cli.main(["demo", "show", "alpha"])
 
-    assert exit_code == 0
-    assert capsys.readouterr().out == "legacy:alpha\n"
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "invalid choice: 'show'" in captured.err
+    assert "demo" in captured.err

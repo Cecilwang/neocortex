@@ -4,27 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from neocortex.commands.db import build_db_query_command_spec
-from neocortex.commands.agent import build_agent_render_command_spec
-from neocortex.commands.indicator import (
-    build_indicator_command_specs,
-    build_indicator_list_command_spec,
-)
+from neocortex.commands.agent import build_agent_command_specs
+from neocortex.commands.connector import build_connector_command_specs
+from neocortex.commands.db import build_db_command_specs
+from neocortex.commands.feishu import build_feishu_command_specs
+from neocortex.commands.indicator import build_all_indicator_command_specs
 from neocortex.commands.market_data_provider import (
-    build_market_data_provider_bars_command_spec,
-    build_market_data_provider_disclosures_command_spec,
-    build_market_data_provider_fundamentals_command_spec,
-    build_market_data_provider_init_db_command_spec,
-    build_market_data_provider_macro_command_spec,
-    build_market_data_provider_profile_command_spec,
-    build_market_data_provider_securities_command_spec,
-    build_market_data_provider_trading_dates_command_spec,
+    build_market_data_provider_command_specs,
 )
-from neocortex.commands.sync import (
-    build_sync_bars_command_spec,
-    build_sync_securities_command_spec,
-    build_sync_trading_dates_command_spec,
-)
+from neocortex.commands.sync import build_sync_command_specs
 from neocortex.commands.core import CommandRegistry
 from neocortex.config import get_config
 
@@ -37,80 +25,18 @@ def build_command_registry() -> CommandRegistry:
 
     logger.info("Building default command registry.")
     app_config = get_config()
+    default_db_path = str(app_config.storage.market_data_db_path)
     registry = CommandRegistry()
-    registry.register(
-        build_db_query_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
+    spec_groups = (
+        build_db_command_specs(default_db_path=default_db_path),
+        build_market_data_provider_command_specs(default_db_path=default_db_path),
+        build_sync_command_specs(default_db_path=default_db_path),
+        build_all_indicator_command_specs(default_db_path=default_db_path),
+        build_agent_command_specs(default_db_path=default_db_path),
+        build_connector_command_specs(default_db_path=default_db_path),
+        build_feishu_command_specs(),
     )
-    registry.mark_root_managed("db")
-    registry.register(
-        build_market_data_provider_init_db_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_securities_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_bars_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_fundamentals_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_profile_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_disclosures_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_macro_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_market_data_provider_trading_dates_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.mark_root_managed("market-data-provider")
-    registry.register(
-        build_sync_securities_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_sync_bars_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.register(
-        build_sync_trading_dates_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.mark_root_managed("sync")
-    registry.register(build_indicator_list_command_spec())
-    for spec in build_indicator_command_specs(
-        default_db_path=str(app_config.storage.market_data_db_path),
-    ):
-        registry.register(spec)
-    registry.mark_root_managed("indicator")
-    registry.register(
-        build_agent_render_command_spec(
-            default_db_path=str(app_config.storage.market_data_db_path),
-        )
-    )
-    registry.mark_root_managed("agent")
+    for specs in spec_groups:
+        for spec in specs:
+            registry.register(spec)
     return registry

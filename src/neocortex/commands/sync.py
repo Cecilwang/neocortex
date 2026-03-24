@@ -61,13 +61,12 @@ def build_sync_securities_command_spec(
         logger.info(f"Running provider sync securities command: market={args.market}")
         provider = ReadThroughMarketDataProvider.from_defaults(args.db_path)
         security_ids = provider.list_securities(market=Market(args.market))
-        return CommandResult.json(
-            {
-                "market": args.market,
-                "synced_security_count": len(security_ids),
-                "tickers": [security_id.ticker for security_id in security_ids],
-            }
-        )
+        summary = {
+            "market": args.market,
+            "synced_security_count": len(security_ids),
+            "tickers": [security_id.ticker for security_id in security_ids],
+        }
+        return CommandResult.json(summary)
 
     return CommandSpec(
         id=("sync", "securities"),
@@ -169,16 +168,15 @@ def build_sync_bars_command_spec(
             )
             synced_tickers.append(security_id.ticker)
             total_bar_count += len(price_series)
-        return CommandResult.json(
-            {
-                "market": args.market,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "synced_security_count": len(security_ids),
-                "synced_bar_count": total_bar_count,
-                "tickers": synced_tickers,
-            }
-        )
+        summary = {
+            "market": args.market,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "synced_security_count": len(security_ids),
+            "synced_bar_count": total_bar_count,
+            "tickers": synced_tickers,
+        }
+        return CommandResult.json(summary)
 
     return CommandSpec(
         id=("sync", "bars"),
@@ -214,17 +212,14 @@ def build_sync_trading_dates_command_spec(
             start_date=_CN_TRADING_DATE_SYNC_START,
             end_date=end_date,
         )
-        return CommandResult.json(
-            {
-                "market": "CN",
-                "start_date": _CN_TRADING_DATE_SYNC_START.isoformat(),
-                "end_date": end_date.isoformat(),
-                "synced_record_count": len(records),
-                "trading_day_count": sum(
-                    1 for record in records if record.is_trading_day
-                ),
-            }
-        )
+        summary = {
+            "market": "CN",
+            "start_date": _CN_TRADING_DATE_SYNC_START.isoformat(),
+            "end_date": end_date.isoformat(),
+            "synced_record_count": len(records),
+            "trading_day_count": sum(1 for record in records if record.is_trading_day),
+        }
+        return CommandResult.json(summary)
 
     return CommandSpec(
         id=("sync", "trading-dates"),
@@ -235,4 +230,12 @@ def build_sync_trading_dates_command_spec(
         execution=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
+    )
+
+
+def build_sync_command_specs(*, default_db_path: str) -> tuple[CommandSpec, ...]:
+    return (
+        build_sync_securities_command_spec(default_db_path=default_db_path),
+        build_sync_bars_command_spec(default_db_path=default_db_path),
+        build_sync_trading_dates_command_spec(default_db_path=default_db_path),
     )

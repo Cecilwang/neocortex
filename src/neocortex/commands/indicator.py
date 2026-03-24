@@ -213,3 +213,10 @@ def _indicator_rows(data) -> list[dict[str, Any]]:
             lambda value: value.isoformat() if hasattr(value, "isoformat") else value
         )
     return frame.to_dict(orient="records")
+
+
+def build_all_indicator_command_specs(*, default_db_path: str) -> tuple[CommandSpec, ...]:
+    return (
+        build_indicator_list_command_spec(),
+        *build_indicator_command_specs(default_db_path=default_db_path),
+    )

@@ -258,11 +258,11 @@ def test_cli_connector_profile_command_prints_source_snapshot(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     fake_connector = FakeAkShareConnector(timeout=3.0)
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -300,11 +300,11 @@ def test_cli_connector_profile_infers_cn_exchange_from_symbol(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     fake_connector = FakeAkShareConnector(timeout=3.0)
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -372,17 +372,17 @@ def test_cli_connector_profile_command_accepts_name_lookup(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
+    from neocortex import security_resolution
 
     fake_connector = FakeAkShareConnector(timeout=3.0)
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
     monkeypatch.setattr(
-        cli_common,
+        security_resolution,
         "find_security_ids_by_name",
         lambda **kwargs: (
             (
@@ -420,16 +420,52 @@ def test_cli_connector_profile_command_accepts_name_lookup(
     assert payload["provider_company_name"] == "贵州茅台"
 
 
+def test_cli_connector_baostock_securities_command_renders_security_listing_table(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import connector as connector_commands
+
+    class FakeBaoStockConnector:
+        def list_securities(self, *, market: Market):
+            return (
+                SecurityListing(
+                    security_id=SecurityId(
+                        symbol="600519",
+                        market=market,
+                        exchange=Exchange.XSHG,
+                    ),
+                    name="贵州茅台",
+                ),
+            )
+
+    monkeypatch.setattr(
+        connector_commands,
+        "BaoStockConnector",
+        lambda: FakeBaoStockConnector(),
+    )
+
+    exit_code = cli.main(["connector", "baostock", "securities", "--market", "CN"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "security_id.symbol" in output
+    assert "security_id.market" in output
+    assert "security_id.exchange" in output
+    assert "贵州茅台" in output
+
+
 def test_cli_connector_daily_command_prints_source_records(
     monkeypatch,
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     fake_connector = FakeAkShareConnector()
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -458,9 +494,10 @@ def test_cli_connector_daily_command_prints_source_records(
         date(2026, 3, 14),
         date(2026, 3, 15),
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["trade_date"] == "2026-03-14"
-    assert payload[0]["close"] == 1515.0
+    output = capsys.readouterr().out
+    assert "trade_date" in output
+    assert "2026-03-14" in output
+    assert "1515.0" in output
 
 
 def test_cli_connector_daily_defaults_to_today_and_ten_year_lookback(
@@ -468,23 +505,23 @@ def test_cli_connector_daily_defaults_to_today_and_ten_year_lookback(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
+    from neocortex import date_resolution
 
     fake_connector = FakeAkShareConnector()
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
     monkeypatch.setattr(
-        cli_common,
+        connector_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
     monkeypatch.setattr(
-        cli_common,
+        date_resolution,
         "default_end_date",
         lambda *, market, provider=None, now=None: date(2026, 3, 20),
     )
@@ -507,8 +544,9 @@ def test_cli_connector_daily_defaults_to_today_and_ten_year_lookback(
         date(2016, 3, 20),
         date(2026, 3, 20),
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["trade_date"] == "2026-03-14"
+    output = capsys.readouterr().out
+    assert "trade_date" in output
+    assert "2026-03-14" in output
 
 
 def test_default_end_date_for_cn_uses_previous_trading_day_before_close() -> None:
@@ -552,11 +590,11 @@ def test_cli_connector_adjusted_daily_command_prints_source_records(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     fake_connector = FakeAkShareConnector()
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -588,13 +626,14 @@ def test_cli_connector_adjusted_daily_command_prints_source_records(
         date(2026, 3, 15),
         "qfq",
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["adjustment_type"] == "qfq"
+    output = capsys.readouterr().out
+    assert "adjustment_type" in output
+    assert "qfq" in output
 
 
 def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
     from neocortex import cli
-    from neocortex.cli import feishu as feishu_cli
+    from neocortex.commands import feishu as feishu_commands
 
     parser_cli = importlib.import_module("neocortex.cli.main")
 
@@ -607,7 +646,9 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
             {"path": path, "override": override}
         ),
     )
-    monkeypatch.setattr(feishu_cli.FeishuSettings, "from_env", lambda: fake_settings)
+    monkeypatch.setattr(
+        feishu_commands.FeishuSettings, "from_env", lambda: fake_settings
+    )
     monkeypatch.setattr(
         parser_cli,
         "configure_logging",
@@ -621,7 +662,7 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
         def start(self) -> None:
             captured["started"] = True
 
-    monkeypatch.setattr(feishu_cli, "FeishuLongConnectionRunner", FakeRunner)
+    monkeypatch.setattr(feishu_commands, "FeishuLongConnectionRunner", FakeRunner)
 
     exit_code = cli.main(
         ["--env-file", ".env.local", "--log-level", "DEBUG", "feishu", "longconn"]
@@ -639,14 +680,14 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
 
 def test_cli_loads_default_dotenv_search_by_default(monkeypatch, capsys) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     parser_cli = importlib.import_module("neocortex.cli.main")
 
     fake_connector = FakeAkShareConnector()
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -681,14 +722,14 @@ def test_cli_loads_default_dotenv_search_by_default(monkeypatch, capsys) -> None
 
 def test_cli_connector_commands_accept_shared_logging_args(monkeypatch, capsys) -> None:
     from neocortex import cli
-    from neocortex.cli import connector as connector_cli
+    from neocortex.commands import connector as connector_commands
 
     parser_cli = importlib.import_module("neocortex.cli.main")
 
     fake_connector = FakeAkShareConnector()
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        connector_cli,
+        connector_commands,
         "AkShareConnector",
         lambda timeout=None: fake_connector,
     )
@@ -1628,7 +1669,7 @@ def test_cli_sync_bars_supports_ticker_collection(
     ]
     payload = json.loads(capsys.readouterr().out)
     assert payload["synced_security_count"] == 2
-    assert payload["synced_bar_count"] == 4
+    assert payload["tickers"] == ["CN:600519", "CN:000001"]
 
 
 def test_cli_sync_bars_supports_fuzzy_name_in_ticker_collection(

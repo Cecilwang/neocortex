@@ -157,7 +157,6 @@ class ParsedInvocation:
 
     spec: CommandSpec
     args: argparse.Namespace
-    raw_tokens: tuple[str, ...]
 
 
 class CommandError(ValueError):
@@ -216,7 +215,6 @@ class CommandRegistry:
 
     def __init__(self) -> None:
         self._specs: dict[tuple[str, ...], CommandSpec] = {}
-        self._managed_roots: set[str] = set()
 
     def register(self, spec: CommandSpec) -> None:
         if spec.id in self._specs:
@@ -233,43 +231,15 @@ class CommandRegistry:
             return specs
         return tuple(spec for spec in specs if spec.exposure is exposure)
 
-    def root_commands(self) -> tuple[str, ...]:
-        # Temporary mixed-mode CLI bridge. Remove once all roots are registry-managed.
-        return tuple(sorted({command_id[0] for command_id in self._specs}))
-
-    def mark_root_managed(self, root: str) -> None:
-        # Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
-        self._managed_roots.add(root)
-
-    def manages_root(self, root: str | None) -> bool:
-        # Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
-        return root in self._managed_roots
-
-    def match_command(
-        self, tokens: list[str] | tuple[str, ...]
-    ) -> tuple[str, ...] | None:
-        """Return the longest registered command path found in the leading argv tokens.
-
-        Temporary mixed-mode CLI bridge. Remove once legacy CLI dispatch is deleted.
-        """
-
-        matched_command: tuple[str, ...] | None = None
-        path_tokens: list[str] = []
-        for token in tokens:
-            if token.startswith("-"):
-                break
-            path_tokens.append(token)
-            candidate = tuple(path_tokens)
-            if candidate in self._specs:
-                matched_command = candidate
-        return matched_command
-
-    def build_parser(self) -> CommandArgumentParser:
-        logger.debug("Building argparse parser for command registry.")
-        parser = CommandArgumentParser(prog="neocortex")
-        subcommands = parser.add_subparsers(dest="_command_root", required=True)
+    def bind_subcommands(
+        self,
+        subcommands: argparse._SubParsersAction[argparse.ArgumentParser],
+    ) -> None:
+        logger.debug("Binding registry commands into argparse subparsers.")
         parser_nodes: dict[tuple[str, ...], argparse.ArgumentParser] = {}
-        nested_subparsers: dict[tuple[str, ...], argparse._SubParsersAction] = {
+        nested_subparsers: dict[
+            tuple[str, ...], argparse._SubParsersAction[argparse.ArgumentParser]
+        ] = {
             (): subcommands
         }
         for spec in self.list():
@@ -302,38 +272,6 @@ class CommandRegistry:
                         required=True,
                     )
                     nested_subparsers[prefix] = next_subparsers
-                parent = next_subparsers
-        return parser
-
-    def parse(self, tokens: list[str] | tuple[str, ...]) -> ParsedInvocation:
-        raw_tokens = tuple(tokens)
-        logger.debug("Registry parser received command invocation.")
-        parser = self.build_parser()
-        args = parser.parse_args(raw_tokens)
-        spec = getattr(args, "_command_spec", None)
-        if not isinstance(spec, CommandSpec):
-            raise RuntimeError(
-                "Registry parser returned successfully without a bound command spec."
-            )
-        logger.debug(f"Registry parser matched [{spec.path}]")
-        return ParsedInvocation(
-            spec=spec,
-            args=args,
-            raw_tokens=raw_tokens,
-        )
-
-    def run(
-        self,
-        tokens: list[str] | tuple[str, ...],
-        context: CommandContext,
-    ) -> CommandResult:
-        """Parse and execute one registry-managed command for any transport."""
-
-        raw_tokens = tuple(tokens)
-        logger.debug(f"Executing registry command: source={context.actor.source.value}")
-        invocation = self.parse(raw_tokens)
-        dispatcher = CommandDispatcher()
-        return dispatcher.dispatch(invocation, context)
 
 
 class CommandDispatcher:

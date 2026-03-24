@@ -87,6 +87,10 @@ def build_agent_render_command_spec(
     )
 
 
+def build_agent_command_specs(*, default_db_path: str) -> tuple[CommandSpec, ...]:
+    return (build_agent_render_command_spec(default_db_path=default_db_path),)
+
+
 def _build_render_payload(
     args: argparse.Namespace,
     *,
