@@ -19,17 +19,14 @@ from neocortex.commands import (
 from neocortex.config import get_config, load_dotenv, reset_config_cache
 from neocortex.log import configure_logging
 
-from neocortex.cli.agent import add_agent_commands
 from neocortex.cli.connector import add_connector_commands
 from neocortex.cli.feishu import add_feishu_commands
-from neocortex.cli.indicator import add_indicator_commands
 from neocortex.cli.render import render_command_result
 
 logger = logging.getLogger(__name__)
 
 
 def build_legacy_parser() -> argparse.ArgumentParser:
-    app_config = get_config()
     parser = argparse.ArgumentParser(prog="neocortex")
     parser.add_argument("--env-file", default=None)
     parser.add_argument(
@@ -40,14 +37,6 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="domain", required=True)
 
     add_connector_commands(subcommands)
-    add_indicator_commands(
-        subcommands,
-        default_db_path=str(app_config.storage.market_data_db_path),
-    )
-    add_agent_commands(
-        subcommands,
-        default_db_path=str(app_config.storage.market_data_db_path),
-    )
     add_feishu_commands(subcommands)
     return parser
 

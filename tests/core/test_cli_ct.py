@@ -734,10 +734,9 @@ def test_cli_indicator_list_outputs_registry_metadata(capsys) -> None:
 def test_cli_indicator_help_describes_default_date_range(capsys) -> None:
     from neocortex import cli
 
-    with pytest.raises(SystemExit) as error:
-        cli.main(["indicator", "sma", "--help"])
+    exit_code = cli.main(["indicator", "sma", "--help"])
 
-    assert error.value.code == 0
+    assert exit_code == 0
     help_text = capsys.readouterr().out
     assert "Defaults to 10 years before --end-date." in help_text
     assert "BaoStock data is expected to" in help_text
@@ -751,11 +750,11 @@ def test_cli_indicator_subcommand_uses_provider_bars_and_parameters(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import indicator as indicator_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        indicator_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
@@ -763,9 +762,9 @@ def test_cli_indicator_subcommand_uses_provider_bars_and_parameters(
     exit_code = cli.main(
         [
             "indicator",
+            "roc",
             "--db-path",
             "/tmp/market.sqlite3",
-            "roc",
             "--market",
             "CN",
             "--symbol",
@@ -795,6 +794,48 @@ def test_cli_indicator_subcommand_uses_provider_bars_and_parameters(
     assert payload["rows"][-1]["value"] == pytest.approx(
         ((1528.0 - 1515.0) / 1515.0) * 100.0
     )
+
+
+def test_cli_indicator_supports_multiple_values_after_one_param_flag(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import indicator as indicator_commands
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        indicator_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+
+    exit_code = cli.main(
+        [
+            "indicator",
+            "macd",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+            "--symbol",
+            "600519",
+            "--start-date",
+            "2026-03-14",
+            "--end-date",
+            "2026-03-15",
+            "--param",
+            "fast_window=10",
+            "slow_window=20",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["indicator"] == "macd"
+    assert payload["parameters"] == {"fast_window": 10, "slow_window": 20}
 
 
 def test_cli_db_query_command_prints_table_output_from_registry(
@@ -888,18 +929,18 @@ def test_cli_agent_render_defaults_as_of_date_with_market_rule(
     capsys,
 ) -> None:
     from neocortex import cli
-    from neocortex.cli import agent as agent_cli
-    from neocortex.cli import common as cli_common
+    from neocortex import date_resolution
+    from neocortex.commands import agent as agent_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        agent_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
-    monkeypatch.setattr(agent_cli, "Pipeline", FakePipeline)
+    monkeypatch.setattr(agent_commands, "Pipeline", FakePipeline)
     monkeypatch.setattr(
-        cli_common,
+        date_resolution,
         "default_end_date",
         lambda *, market, provider=None, now=None: date(2026, 3, 20),
     )
@@ -907,9 +948,9 @@ def test_cli_agent_render_defaults_as_of_date_with_market_rule(
     exit_code = cli.main(
         [
             "agent",
+            "render",
             "--db-path",
             "/tmp/market.sqlite3",
-            "render",
             "--role",
             "technical",
             "--market",
@@ -1418,23 +1459,22 @@ def test_cli_sync_trading_dates_uses_fixed_cn_full_range(
 
 def test_cli_agent_render_outputs_request_and_prompts(monkeypatch, capsys) -> None:
     from neocortex import cli
-    from neocortex.cli import agent as agent_cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import agent as agent_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        agent_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
-    monkeypatch.setattr(agent_cli, "Pipeline", FakePipeline)
+    monkeypatch.setattr(agent_commands, "Pipeline", FakePipeline)
 
     exit_code = cli.main(
         [
             "agent",
+            "render",
             "--db-path",
             "/tmp/market.sqlite3",
-            "render",
             "--role",
             "technical",
             "--market",
@@ -1731,23 +1771,22 @@ def test_cli_sync_bars_supports_multiple_values_after_one_ticker_flag(
 
 def test_cli_agent_render_outputs_text_when_requested(monkeypatch, capsys) -> None:
     from neocortex import cli
-    from neocortex.cli import agent as agent_cli
-    from neocortex.cli import common as cli_common
+    from neocortex.commands import agent as agent_commands
 
     _reset_fake_provider_state()
     monkeypatch.setattr(
-        cli_common,
+        agent_commands,
         "ReadThroughMarketDataProvider",
         FakeProviderFactory,
     )
-    monkeypatch.setattr(agent_cli, "Pipeline", FakePipeline)
+    monkeypatch.setattr(agent_commands, "Pipeline", FakePipeline)
 
     exit_code = cli.main(
         [
             "agent",
+            "render",
             "--db-path",
             "/tmp/market.sqlite3",
-            "render",
             "--role",
             "technical",
             "--market",

@@ -289,6 +289,16 @@ uv run python -m neocortex indicator macd \
   --format json
 ```
 
+`--param` 也支持在一个 flag 后面直接跟多个参数：
+
+```bash
+uv run python -m neocortex indicator macd \
+  --market CN \
+  --name 中芯国际 \
+  --param fast_window=10 slow_window=20 \
+  --format json
+```
+
 ## Feishu
 
 启动长连接：

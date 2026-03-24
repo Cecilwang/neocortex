@@ -5,6 +5,11 @@ from __future__ import annotations
 import logging
 
 from neocortex.commands.db import build_db_query_command_spec
+from neocortex.commands.agent import build_agent_render_command_spec
+from neocortex.commands.indicator import (
+    build_indicator_command_specs,
+    build_indicator_list_command_spec,
+)
 from neocortex.commands.market_data_provider import (
     build_market_data_provider_bars_command_spec,
     build_market_data_provider_disclosures_command_spec,
@@ -96,4 +101,16 @@ def build_command_registry() -> CommandRegistry:
         )
     )
     registry.mark_root_managed("sync")
+    registry.register(build_indicator_list_command_spec())
+    for spec in build_indicator_command_specs(
+        default_db_path=str(app_config.storage.market_data_db_path),
+    ):
+        registry.register(spec)
+    registry.mark_root_managed("indicator")
+    registry.register(
+        build_agent_render_command_spec(
+            default_db_path=str(app_config.storage.market_data_db_path),
+        )
+    )
+    registry.mark_root_managed("agent")
     return registry
