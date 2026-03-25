@@ -67,9 +67,8 @@ class FeishuLongConnectionRunner:
         event_id = getattr(event.header, "event_id", None)
         logger.info(f"Received long-connection event: event_id={event_id}")
         logger.info(
-            "Feishu raw long-connection event: event_id=%s payload=\n%s",
-            event_id,
-            to_pretty_json(event.event),
+            f"Feishu raw long-connection event: event_id={event_id} payload=\n"
+            f"{to_pretty_json(event.event)}"
         )
         payload = {
             "schema": "2.0",

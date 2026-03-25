@@ -42,6 +42,32 @@ def _build_async_cli_registry() -> CommandRegistry:
     return registry
 
 
+def _build_async_table_cli_registry() -> CommandRegistry:
+    registry = CommandRegistry()
+
+    def handler(args: argparse.Namespace, context) -> CommandResult:
+        _ = args
+        _ = context
+        return CommandResult.table(
+            columns=("symbol", "close"),
+            rows=(("600519", 123.45),),
+        )
+
+    registry.register(
+        CommandSpec(
+            id=("demo", "async-table"),
+            summary="Run one async demo table command.",
+            description="Run one async demo table command.",
+            exposure=Exposure.SHARED,
+            auth=AuthPolicy.PUBLIC,
+            execution_mode=ExecutionMode.ASYNC,
+            configure_parser=lambda parser: None,
+            handler=handler,
+        )
+    )
+    return registry
+
+
 def _build_policy_cli_registry() -> CommandRegistry:
     registry = CommandRegistry()
 
@@ -296,8 +322,12 @@ def test_cli_route_executes_registry_command(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert "name" in client.messages[0]["text"]
-    assert "alpha" in client.messages[0]["text"]
+    assert client.messages[0]["msg_type"] == "interactive"
+    assert client.messages[0]["card"] is not None
+    table = client.messages[0]["card"]["body"]["elements"][0]
+    assert table["tag"] == "table"
+    assert table["columns"][0]["display_name"] == "name"
+    assert table["rows"][0]["col_0"] == "alpha"
 
 
 def test_cli_route_replies_in_thread_for_group_thread_message(tmp_path) -> None:
@@ -321,8 +351,10 @@ def test_cli_route_replies_in_thread_for_group_thread_message(tmp_path) -> None:
 
     assert len(client.messages) == 1
     assert client.messages[0]["chat_id"] == "oc_test_chat"
-    assert "name" in client.messages[0]["text"]
-    assert "alpha" in client.messages[0]["text"]
+    assert client.messages[0]["msg_type"] == "interactive"
+    assert client.messages[0]["card"] is not None
+    table = client.messages[0]["card"]["body"]["elements"][0]
+    assert table["rows"][0]["col_0"] == "alpha"
     assert client.messages[0]["reply_to_message_id"] == "om_thread_message"
     assert client.messages[0]["reply_in_thread"] is True
 
@@ -344,8 +376,10 @@ def test_p2p_cli_route_executes_registry_command(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert "name" in client.messages[0]["text"]
-    assert "alpha" in client.messages[0]["text"]
+    assert client.messages[0]["msg_type"] == "interactive"
+    assert client.messages[0]["card"] is not None
+    table = client.messages[0]["card"]["body"]["elements"][0]
+    assert table["rows"][0]["col_0"] == "alpha"
 
 
 def test_cli_route_rejects_cli_only_command(tmp_path) -> None:
@@ -359,7 +393,9 @@ def test_cli_route_rejects_cli_only_command(tmp_path) -> None:
     assert client.messages == [
         {
             "chat_id": "oc_test_chat",
+            "msg_type": "text",
             "text": "feishu longconn is only available from the CLI.",
+            "card": None,
             "reply_to_message_id": None,
             "reply_in_thread": False,
         }
@@ -373,7 +409,9 @@ def test_cli_route_reports_usage_error(tmp_path) -> None:
     service.handle_event_payload(_activated_group_message_event(text="cli db query"))
 
     assert len(client.messages) == 1
-    assert "one of the arguments --sql --table is required" in client.messages[0]["text"]
+    assert (
+        "one of the arguments --sql --table is required" in client.messages[0]["text"]
+    )
     assert "db query" in client.messages[0]["text"]
 
 
@@ -422,12 +460,45 @@ def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> Non
     assert job.reply_to_message_id is None
     assert job.reply_in_thread is False
     assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert client.messages[0]["msg_type"] == "text"
     assert (
         client.messages[0]["text"]
         == "Accepted job 1: demo async. Use `job 1` to query status."
     )
     assert client.messages[1]["chat_id"] == "oc_test_chat"
+    assert client.messages[1]["msg_type"] == "text"
     assert client.messages[1]["text"] == "Job 1 succeeded.\nasync:alpha"
+
+
+def test_cli_async_table_route_prefixes_job_status_in_card_title(
+    tmp_path, monkeypatch
+) -> None:
+    from neocortex.feishu import service as feishu_service
+
+    client = FakeClient()
+    store = FeishuBotStore(tmp_path / "jobs.sqlite3")
+    service = FeishuBotService(
+        _settings(tmp_path),
+        client=client,
+        store=store,
+        executor=ImmediateExecutor(),
+    )
+    monkeypatch.setattr(
+        feishu_service,
+        "build_command_registry",
+        _build_async_table_cli_registry,
+    )
+
+    service.handle_event_payload(
+        _activated_group_message_event(text="cli demo async-table")
+    )
+
+    assert client.messages[0]["msg_type"] == "text"
+    assert client.messages[1]["msg_type"] == "interactive"
+    assert (
+        client.messages[1]["card"]["header"]["title"]["content"]
+        == "Job 1 succeeded: demo async-table (1 rows)"
+    )
 
 
 def test_cli_execution_policy_switches_between_sync_and_async(
@@ -459,13 +530,16 @@ def test_cli_execution_policy_switches_between_sync_and_async(
     )
 
     assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert client.messages[0]["msg_type"] == "text"
     assert client.messages[0]["text"] == "policy:False"
     assert client.messages[1]["chat_id"] == "oc_test_chat"
+    assert client.messages[1]["msg_type"] == "text"
     assert (
         client.messages[1]["text"]
         == "Accepted job 1: demo policy. Use `job 1` to query status."
     )
     assert client.messages[2]["chat_id"] == "oc_test_chat"
+    assert client.messages[2]["msg_type"] == "text"
     assert client.messages[2]["text"] == "Job 1 succeeded.\npolicy:True"
 
 
@@ -564,7 +638,9 @@ def test_job_route_reports_usage_for_invalid_job_id(tmp_path) -> None:
     assert client.messages == [
         {
             "chat_id": "oc_test_chat",
+            "msg_type": "text",
             "text": "Usage: job <job-id>",
+            "card": None,
             "reply_to_message_id": None,
             "reply_in_thread": False,
         }

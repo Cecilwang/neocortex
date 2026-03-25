@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
+from dataclasses import replace
 import json
 import logging
 import re
@@ -24,8 +25,21 @@ from neocortex.commands import (
     ParsedInvocation,
     build_command_registry,
 )
+from neocortex.feishu.cards import build_table_card
 from neocortex.feishu.client import FeishuClient
-from neocortex.feishu.models import BotRequest, FeishuMention, FeishuMessageEvent
+from neocortex.feishu.models import (
+    BotRequest,
+    FeishuCardResp,
+    FeishuDefaultHelpResp,
+    FeishuFailedResp,
+    FeishuFailedWithDefaultHelpResp,
+    FeishuHelpResp,
+    FeishuMention,
+    FeishuMessageEvent,
+    FeishuResp,
+    FeishuMessageTarget,
+    FeishuTextResp,
+)
 from neocortex.feishu.settings import FeishuSettings
 from neocortex.feishu.storage import FeishuBotStore
 from neocortex.serialization import to_pretty_json
@@ -33,10 +47,6 @@ from neocortex.tabular import render_table
 
 
 logger = logging.getLogger(__name__)
-HELP_TEXT = """Available commands:
-help
-job <job-id>
-cli <full-cli-command>"""
 _AT_TAG_PATTERN = re.compile(r"<at\b[^>]*>.*?</at>", re.DOTALL)
 _LEADING_AT_TAGS_PATTERN = re.compile(r"^(?:\s*<at\b[^>]*>.*?</at>\s*)+", re.DOTALL)
 _LEADING_PLACEHOLDER_MENTION_PATTERN = re.compile(r"^(?:@_user_\d+\s*)+")
@@ -53,12 +63,6 @@ class _LeadingAtTags:
 class _LeadingPlaceholderMentions:
     keys: tuple[str, ...]
     remainder: str
-
-
-@dataclass(frozen=True, slots=True)
-class _CliExecutionOutcome:
-    ok: bool
-    text: str
 
 
 class FeishuMessageNormalizer:
@@ -237,16 +241,24 @@ class FeishuBotService:
             self._handle_cli_request(event, request)
             return
         if request.kind == "help":
-            self._send_event_reply(event, HELP_TEXT)
+            self.client.send(FeishuDefaultHelpResp(target=event.target))
             return
         if request.kind == "job":
-            self._send_event_reply(event, self._render_job_status(request))
+            self.client.send(
+                FeishuTextResp(
+                    target=event.target, text=self._render_job_status(request)
+                )
+            )
             return
         logger.warning(
             f"Invalid Feishu command: event_id={event.event_id} "
             f"chat_type={event.chat_type} sender={event.sender_id}"
         )
-        self._send_event_reply(event, f"Invalid command.\n\n{HELP_TEXT}")
+        self.client.send(
+            FeishuFailedWithDefaultHelpResp(
+                target=event.target, text="Invalid command."
+            )
+        )
 
     def _handle_cli_request(
         self, event: FeishuMessageEvent, request: BotRequest
@@ -257,16 +269,21 @@ class FeishuBotService:
         try:
             invocation = _parse_cli_invocation(_cli_tokens(request))
         except CommandHelpRequested as exc:
-            self._send_event_reply(event, exc.help_text)
+            self.client.send(FeishuHelpResp(target=event.target, text=exc.help_text))
             return
         except CommandUsageError as exc:
             text = exc.message
             if exc.help_text:
                 text = f"{text}\n\n{exc.help_text}"
-            self._send_event_reply(event, text)
-            return
+                self.client.send(FeishuFailedResp(target=event.target, text=text))
+                return
+            else:
+                self.client.send(
+                    FeishuFailedWithDefaultHelpResp(target=event.target, text=text)
+                )
+                return
         except ValueError as exc:
-            self._send_event_reply(event, str(exc))
+            self.client.send(FeishuFailedResp(target=event.target, text=str(exc)))
             return
 
         if invocation.spec.exposure is Exposure.CLI_ONLY:
@@ -274,9 +291,11 @@ class FeishuBotService:
                 f"Rejected cli-only Feishu command: path={invocation.spec.path} "
                 f"sender={event.sender_id}"
             )
-            self._send_event_reply(
-                event,
-                f"{invocation.spec.path} is only available from the CLI.",
+            self.client.send(
+                FeishuFailedResp(
+                    target=event.target,
+                    text=f"{invocation.spec.path} is only available from the CLI.",
+                )
             )
             return
 
@@ -295,17 +314,22 @@ class FeishuBotService:
             logger.info(
                 f"Queued Feishu cli async job_id={job.id} command={invocation.spec.path}"
             )
-            self._send_event_reply(
-                event,
-                f"Accepted job {job.id}: {invocation.spec.path}. Use `job {job.id}` to query status.",
+            self.client.send(
+                FeishuTextResp(
+                    target=event.target,
+                    text=(
+                        f"Accepted job {job.id}: {invocation.spec.path}. "
+                        f"Use `job {job.id}` to query status."
+                    ),
+                )
             )
             self.executor.submit(self._run_cli_job, job.id, invocation, context)
             return
 
-        outcome = self._execute_cli_invocation(
-            invocation, context, dispatcher=dispatcher
+        response = self._execute_cli_invocation(
+            invocation, context, event.target, dispatcher=dispatcher
         )
-        self._send_event_reply(event, outcome.text)
+        self.client.send(response)
 
     def _build_command_context(self, event: FeishuMessageEvent) -> CommandContext:
         return CommandContext(
@@ -334,60 +358,18 @@ class FeishuBotService:
         if job is None:
             return
         dispatcher = CommandDispatcher()
-        outcome = self._execute_cli_invocation(
-            invocation, context, dispatcher=dispatcher
+        response = self._execute_cli_invocation(
+            invocation, context, job.target, dispatcher=dispatcher
         )
-        if not outcome.ok:
-            self.store.mark_job_failed(job_id, error_text=outcome.text)
+        if not response.ok:
+            self.store.mark_job_failed(job_id)
             logger.warning(f"Async Feishu cli job {job_id} failed.")
-            self._send_job_reply(job, f"Job {job_id} failed.\n{outcome.text}")
+            self.client.send(replace(response, job_id=job_id))
             return
 
-        self.store.mark_job_succeeded(job_id, result_text=outcome.text)
+        self.store.mark_job_succeeded(job_id)
         logger.info(f"Async Feishu cli job_id={job_id} succeeded")
-        self._send_job_reply(job, f"Job {job_id} succeeded.\n{outcome.text}")
-
-    def _send_reply(self, chat_id: str, text: str) -> None:
-        logger.info(f"Sending reply to chat_id={chat_id} chars={len(text)}")
-        self.client.send_text(
-            chat_id=chat_id, text=_truncate(text, self.settings.max_reply_chars)
-        )
-
-    def _send_event_reply(self, event: FeishuMessageEvent, text: str) -> None:
-        truncated = _truncate(text, self.settings.max_reply_chars)
-        if event.thread_id:
-            logger.info(
-                "Sending thread reply to chat_id=%s message_id=%s chars=%s",
-                event.chat_id,
-                event.message_id,
-                len(text),
-            )
-            self.client.send_text(
-                chat_id=event.chat_id,
-                text=truncated,
-                reply_to_message_id=event.message_id,
-                reply_in_thread=True,
-            )
-            return
-        self._send_reply(event.chat_id, truncated)
-
-    def _send_job_reply(self, job, text: str) -> None:
-        truncated = _truncate(text, self.settings.max_reply_chars)
-        if job.reply_to_message_id:
-            logger.info(
-                "Sending async job reply to chat_id=%s message_id=%s chars=%s",
-                job.chat_id,
-                job.reply_to_message_id,
-                len(text),
-            )
-            self.client.send_text(
-                chat_id=job.chat_id,
-                text=truncated,
-                reply_to_message_id=job.reply_to_message_id,
-                reply_in_thread=job.reply_in_thread,
-            )
-            return
-        self._send_reply(job.chat_id, truncated)
+        self.client.send(replace(response, job_id=job.id))
 
     def _render_job_status(self, request: BotRequest) -> str:
         parts = request.text.split()
@@ -406,41 +388,49 @@ class FeishuBotService:
             parts.append(f"started_at={job.started_at}")
         if job.finished_at is not None:
             parts.append(f"finished_at={job.finished_at}")
-        if job.result_text:
-            parts.append(f"result={job.result_text}")
-        if job.error_text:
-            parts.append(f"error={job.error_text}")
         return "\n".join(parts)
 
     def _execute_cli_invocation(
         self,
         invocation: ParsedInvocation,
         context: CommandContext,
+        target: FeishuMessageTarget,
         *,
         dispatcher: CommandDispatcher,
-    ) -> _CliExecutionOutcome:
+    ) -> FeishuResp:
         try:
             result = dispatcher.dispatch(invocation, context)
         except CommandHelpRequested as exc:
-            return _CliExecutionOutcome(ok=False, text=exc.help_text)
+            return FeishuHelpResp(target=target, text=exc.help_text)
         except CommandUsageError as exc:
             text = exc.message
             if exc.help_text:
                 text = f"{text}\n\n{exc.help_text}"
-            return _CliExecutionOutcome(ok=False, text=text)
+                return FeishuFailedResp(target=target, text=text)
+            else:
+                return FeishuFailedWithDefaultHelpResp(target=target, text=text)
         except PermissionError:
-            return _CliExecutionOutcome(
-                ok=False,
+            return FeishuFailedResp(
+                target=target,
                 text="Permission denied for this command.",
             )
         except Exception as exc:
             logger.exception(f"Feishu cli command failed: [{invocation.spec.path}]")
-            return _CliExecutionOutcome(
-                ok=False,
+            return FeishuFailedResp(
+                target=target,
                 text=f"{invocation.spec.path} failed.\n{type(exc).__name__}: {exc}",
             )
-        return _CliExecutionOutcome(
-            ok=True,
+        if result.presentation.kind == "table":
+            return FeishuCardResp(
+                target=target,
+                card=build_table_card(
+                    title=f"{invocation.spec.path} ({len(result.presentation.rows)} rows)",
+                    columns=result.presentation.columns,
+                    rows=result.presentation.rows,
+                ),
+            )
+        return FeishuTextResp(
+            target=target,
             text=_render_command_result_for_chat(result),
         )
 
@@ -517,12 +507,6 @@ def _extract_mentions(raw_mentions: object) -> dict[str, FeishuMention]:
 def _strip_leading_placeholder_mentions(raw_text: str) -> str:
     without_tags = _AT_TAG_PATTERN.sub(" ", raw_text)
     return _LEADING_PLACEHOLDER_MENTION_PATTERN.sub("", without_tags, count=1).strip()
-
-
-def _truncate(text: str, max_chars: int) -> str:
-    if len(text) <= max_chars:
-        return text
-    return f"{text[: max_chars - 16]}\n\n...[truncated]"
 
 
 def _cli_tokens(request: BotRequest) -> list[str]:

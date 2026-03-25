@@ -22,7 +22,7 @@ class FeishuSettings:
     base_url: str = "https://open.feishu.cn"
     db_path: Path = Path("data/feishu_bot.sqlite3")
     admin_open_ids: frozenset[str] = frozenset()
-    max_reply_chars: int = 3500
+    max_reply_chars: int = 30000
     job_workers: int = 4
 
     @classmethod
@@ -33,7 +33,7 @@ class FeishuSettings:
         app_id = os.environ["FEISHU_APP_ID"]
         app_secret = os.environ["FEISHU_APP_SECRET"]
         admin_open_ids = _split_csv(os.environ.get("FEISHU_ADMIN_OPEN_IDS", ""))
-        max_reply_chars = int(os.environ.get("FEISHU_MAX_REPLY_CHARS", "3500"))
+        max_reply_chars = int(os.environ.get("FEISHU_MAX_REPLY_CHARS", "30000"))
         job_workers = int(os.environ.get("FEISHU_JOB_WORKERS", "4"))
         base_url = os.environ.get("FEISHU_BASE_URL", "https://open.feishu.cn")
         return cls(

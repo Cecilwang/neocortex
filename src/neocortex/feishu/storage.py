@@ -109,10 +109,8 @@ class FeishuBotStore:
             session.commit()
             logger.info(f"Marked Feishu job running: job_id={job_id}")
 
-    def mark_job_succeeded(
-        self, job_id: int, *, result_text: str
-    ) -> FeishuJobRecord | None:
-        """Mark one job as succeeded and persist the rendered output."""
+    def mark_job_succeeded(self, job_id: int) -> FeishuJobRecord | None:
+        """Mark one job as succeeded."""
 
         logger.info(f"Marking Feishu job succeeded: job_id={job_id}")
         with self.session_factory() as session:
@@ -123,17 +121,14 @@ class FeishuBotStore:
                 )
                 return None
             row.status = JobStatus.SUCCEEDED.value
-            row.result_text = result_text
             row.finished_at = utc_now_iso()
             session.commit()
             session.refresh(row)
             logger.info(f"Marked Feishu job succeeded: job_id={job_id}")
             return _to_job_record(row)
 
-    def mark_job_failed(
-        self, job_id: int, *, error_text: str
-    ) -> FeishuJobRecord | None:
-        """Mark one job as failed and persist the failure reason."""
+    def mark_job_failed(self, job_id: int) -> FeishuJobRecord | None:
+        """Mark one job as failed."""
 
         logger.info(f"Marking Feishu job failed: job_id={job_id}")
         with self.session_factory() as session:
@@ -142,7 +137,6 @@ class FeishuBotStore:
                 logger.info(f"Feishu job missing when marking failed: job_id={job_id}")
                 return None
             row.status = JobStatus.FAILED.value
-            row.error_text = error_text
             row.finished_at = utc_now_iso()
             session.commit()
             session.refresh(row)
@@ -192,6 +186,7 @@ class FeishuBotStore:
         )
         return receipts_deleted, jobs_deleted
 
+
 def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:
     return FeishuJobRecord(
         id=row.id,
@@ -205,6 +200,4 @@ def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:
         submitted_at=row.submitted_at,
         started_at=row.started_at,
         finished_at=row.finished_at,
-        result_text=row.result_text,
-        error_text=row.error_text,
     )

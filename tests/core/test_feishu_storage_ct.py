@@ -40,11 +40,10 @@ def test_job_state_transitions_round_trip_through_store(tmp_path) -> None:
     assert running_job.reply_to_message_id == "om_message"
     assert running_job.reply_in_thread is True
 
-    store.mark_job_succeeded(queued_job.id, result_text="done")
+    store.mark_job_succeeded(queued_job.id)
     succeeded_job = store.get_job(queued_job.id)
     assert succeeded_job is not None
     assert succeeded_job.status is JobStatus.SUCCEEDED
-    assert succeeded_job.result_text == "done"
     assert succeeded_job.finished_at is not None
 
     failed_job = store.create_job(
@@ -53,11 +52,10 @@ def test_job_state_transitions_round_trip_through_store(tmp_path) -> None:
         chat_id="oc_chat",
         user_open_id="ou_user",
     )
-    store.mark_job_failed(failed_job.id, error_text="boom")
+    store.mark_job_failed(failed_job.id)
     loaded_failed_job = store.get_job(failed_job.id)
     assert loaded_failed_job is not None
     assert loaded_failed_job.status is JobStatus.FAILED
-    assert loaded_failed_job.error_text == "boom"
     assert loaded_failed_job.finished_at is not None
 
 

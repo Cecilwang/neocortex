@@ -33,10 +33,10 @@ class FeishuJobRow(BotBase):
     chat_id: Mapped[str] = mapped_column(String, nullable=False)
     user_open_id: Mapped[str] = mapped_column(String, nullable=False)
     reply_to_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    reply_in_thread: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reply_in_thread: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     status: Mapped[str] = mapped_column(String, nullable=False)
     submitted_at: Mapped[str] = mapped_column(String, nullable=False)
     started_at: Mapped[str | None] = mapped_column(String, nullable=True)
     finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
-    result_text: Mapped[str | None] = mapped_column(String, nullable=True)
-    error_text: Mapped[str | None] = mapped_column(String, nullable=True)

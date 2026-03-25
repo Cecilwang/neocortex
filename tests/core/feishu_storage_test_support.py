@@ -28,8 +28,8 @@ def seed_cleanup_test_data(
         chat_id="oc_chat",
         user_open_id="ou_user",
     )
-    store.mark_job_succeeded(old_job.id, result_text="done")
-    store.mark_job_failed(recent_job.id, error_text="boom")
+    store.mark_job_succeeded(old_job.id)
+    store.mark_job_failed(recent_job.id)
     store.mark_job_running(running_job.id)
 
     with sqlite3.connect(db_path) as connection:

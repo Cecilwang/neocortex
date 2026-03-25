@@ -9,6 +9,13 @@ from uuid import uuid4
 
 import httpx
 
+from neocortex.feishu.models import (
+    FeishuCardResp,
+    FeishuResp,
+    FEISHU_HELP_TEXT,
+    FeishuFailedWithDefaultHelpResp,
+    FeishuTextResp,
+)
 from neocortex.feishu.settings import FeishuSettings
 
 
@@ -35,38 +42,36 @@ class FeishuClient:
         self._bot_open_id: str | None = None
         logger.info(f"Initialized FeishuClient: base_url={settings.base_url}")
 
-    def send_text(
-        self,
-        *,
-        chat_id: str,
-        text: str,
-        reply_to_message_id: str | None = None,
-        reply_in_thread: bool = False,
-    ) -> None:
-        """Send one text message into the target chat."""
+    def send(self, response: FeishuResp) -> None:
+        """Send one outbound response into Feishu."""
 
-        payload = {
-            "content": json.dumps({"text": text}, ensure_ascii=False),
-            "msg_type": "text",
+        msg_type, content = _build_transport_payload(
+            response, max_reply_chars=self.settings.max_reply_chars
+        )
+        target = response.target
+        payload: dict[str, object] = {
+            "content": json.dumps(content, ensure_ascii=False),
+            "msg_type": msg_type,
             "uuid": str(uuid4()),
         }
-        if reply_to_message_id:
+        if target.reply_to_message_id:
             logger.info(
-                "Calling Feishu reply_message API for message_id=%s chat_id=%s reply_in_thread=%s",
-                reply_to_message_id,
-                chat_id,
-                reply_in_thread,
+                f"Calling Feishu reply_message API: msg_type={msg_type} "
+                f"message_id={target.reply_to_message_id} chat_id={target.chat_id} "
+                f"reply_in_thread={target.reply_in_thread}"
             )
-            payload["reply_in_thread"] = reply_in_thread
+            payload["reply_in_thread"] = target.reply_in_thread
             self._request(
                 "POST",
-                f"/open-apis/im/v1/messages/{reply_to_message_id}/reply",
+                f"/open-apis/im/v1/messages/{target.reply_to_message_id}/reply",
                 json=payload,
             )
             return
 
-        logger.info(f"Calling Feishu send_message API for chat_id={chat_id}")
-        payload["receive_id"] = chat_id
+        logger.info(
+            f"Calling Feishu send_message API: msg_type={msg_type} chat_id={target.chat_id}"
+        )
+        payload["receive_id"] = target.chat_id
         self._request(
             "POST",
             "/open-apis/im/v1/messages",
@@ -160,3 +165,54 @@ class FeishuClient:
         if self._owns_http_client:
             logger.info("Closing Feishu HTTP client.")
             self.http_client.close()
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 16]}\n\n...[truncated]"
+
+
+def _build_transport_payload(
+    response: FeishuResp,
+    *,
+    max_reply_chars: int,
+) -> tuple[str, dict[str, object]]:
+    if isinstance(response, FeishuTextResp):
+        return "text", {"text": _truncate(_render_text(response), max_reply_chars)}
+    if isinstance(response, FeishuCardResp):
+        return "interactive", _render_card(response)
+    raise TypeError(f"Unsupported Feishu response type: {type(response).__name__}")
+
+
+def _render_text(response: FeishuTextResp) -> str:
+    text = response.text
+    if isinstance(response, FeishuFailedWithDefaultHelpResp):
+        text = f"{text}\n\n{FEISHU_HELP_TEXT}"
+    if response.job_id is not None:
+        status = "succeeded" if response.ok else "failed"
+        text = f"Job {response.job_id} {status}.\n{text}"
+    return text
+
+
+def _render_card(response: FeishuCardResp) -> dict[str, object]:
+    if response.job_id is None:
+        return response.card
+
+    status = "succeeded" if response.ok else "failed"
+    header = response.card.get("header")
+    if not isinstance(header, dict):
+        return response.card
+    title = header.get("title")
+    if not isinstance(title, dict):
+        return response.card
+    content = title.get("content")
+    if not isinstance(content, str):
+        return response.card
+    card = dict(response.card)
+    card_header = dict(header)
+    card_title = dict(title)
+    card["header"] = card_header
+    card_header["title"] = card_title
+    card_title["content"] = f"Job {response.job_id} {status}: {content}"
+    return card
