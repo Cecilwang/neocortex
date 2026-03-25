@@ -10,6 +10,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
@@ -22,6 +23,8 @@ class ROCParams(IndicatorParams):
     period: int = 20
 
     def __post_init__(self) -> None:
+        if not isinstance(self.period, int):
+            raise ValueError("period must be an integer.")
         if self.period <= 0:
             raise ValueError("period must be a positive integer.")
 
@@ -44,7 +47,7 @@ class ROCIndicator(IndicatorSpec):
         *,
         parameters: ROCParams | dict[str, object] | None = None,
     ) -> ROC:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(ROCParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -73,16 +76,4 @@ class ROC(Indicator):
     @property
     def roc(self) -> pd.Series:
         return self.data["value"]
-
-
-def _coerce_params(parameters: ROCParams | dict[str, object] | None) -> ROCParams:
-    if parameters is None:
-        return ROCParams()
-    if isinstance(parameters, ROCParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return ROCParams.from_dict(parameters)
-    raise TypeError("ROCIndicator parameters must be ROCParams, dict, or None.")
-
-
 roc = ROCIndicator()

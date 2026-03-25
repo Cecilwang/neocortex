@@ -56,6 +56,21 @@ class IndicatorParams:
         return cls(**payload)
 
 
+def coerce_indicator_params(
+    expected_type: type[ParamsT],
+    parameters: ParamsT | dict[str, object] | None,
+) -> ParamsT:
+    if parameters is None:
+        return expected_type()
+    if isinstance(parameters, expected_type):
+        return parameters
+    if isinstance(parameters, dict):
+        return expected_type.from_dict(parameters)
+    raise TypeError(
+        f"{expected_type.__name__} parameters must be {expected_type.__name__}, dict, or None."
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Indicator:
     """One indicator calculation result with metadata and tabular output."""

@@ -8,6 +8,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
@@ -28,6 +29,8 @@ class RSIParams(IndicatorParams):
     period: int = 14
 
     def __post_init__(self) -> None:
+        if not isinstance(self.period, int):
+            raise ValueError("period must be an integer.")
         if self.period <= 0:
             raise ValueError("period must be a positive integer.")
 
@@ -52,7 +55,7 @@ class RSIIndicator(IndicatorSpec):
         *,
         parameters: RSIParams | dict[str, object] | None = None,
     ) -> RSI:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(RSIParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -116,16 +119,4 @@ class RSI(Indicator):
     @property
     def rsi(self) -> pd.Series:
         return self.data["value"]
-
-
-def _coerce_params(parameters: RSIParams | dict[str, object] | None) -> RSIParams:
-    if parameters is None:
-        return RSIParams()
-    if isinstance(parameters, RSIParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return RSIParams.from_dict(parameters)
-    raise TypeError("RSIIndicator parameters must be RSIParams, dict, or None.")
-
-
 rsi = RSIIndicator()

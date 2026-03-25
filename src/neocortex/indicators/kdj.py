@@ -10,6 +10,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.models.core import (
@@ -29,6 +30,10 @@ class KDJParams(IndicatorParams):
     signal_window: int = 3
 
     def __post_init__(self) -> None:
+        if not isinstance(self.window, int):
+            raise ValueError("window must be an integer.")
+        if not isinstance(self.signal_window, int):
+            raise ValueError("signal_window must be an integer.")
         if self.window <= 0:
             raise ValueError("window must be a positive integer.")
         if self.signal_window <= 0:
@@ -53,7 +58,7 @@ class KDJIndicator(IndicatorSpec):
         *,
         parameters: KDJParams | dict[str, object] | None = None,
     ) -> KDJ:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(KDJParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -127,16 +132,4 @@ class KDJ(Indicator):
     @property
     def j(self) -> pd.Series:
         return self.data["j"]
-
-
-def _coerce_params(parameters: KDJParams | dict[str, object] | None) -> KDJParams:
-    if parameters is None:
-        return KDJParams()
-    if isinstance(parameters, KDJParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return KDJParams.from_dict(parameters)
-    raise TypeError("KDJIndicator parameters must be KDJParams, dict, or None.")
-
-
 kdj = KDJIndicator()

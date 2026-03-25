@@ -9,6 +9,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
@@ -21,6 +22,8 @@ class SMAParams(IndicatorParams):
     window: int = 20
 
     def __post_init__(self) -> None:
+        if not isinstance(self.window, int):
+            raise ValueError("window must be an integer.")
         if self.window <= 0:
             raise ValueError("window must be a positive integer.")
 
@@ -43,7 +46,7 @@ class SMAIndicator(IndicatorSpec):
         *,
         parameters: SMAParams | dict[str, object] | None = None,
     ) -> SMA:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(SMAParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -69,16 +72,4 @@ class SMA(Indicator):
     @property
     def sma(self) -> pd.Series:
         return self.data["value"]
-
-
-def _coerce_params(parameters: SMAParams | dict[str, object] | None) -> SMAParams:
-    if parameters is None:
-        return SMAParams()
-    if isinstance(parameters, SMAParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return SMAParams.from_dict(parameters)
-    raise TypeError("SMAIndicator parameters must be SMAParams, dict, or None.")
-
-
 sma = SMAIndicator()

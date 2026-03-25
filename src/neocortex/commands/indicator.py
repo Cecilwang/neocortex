@@ -12,6 +12,7 @@ from neocortex.commands.core import (
     CommandContext,
     CommandResult,
     CommandSpec,
+    CommandUsageError,
     ExecutionMode,
     Exposure,
 )
@@ -129,7 +130,10 @@ def build_indicator_command_specs(
                 start_date=args.start_date,
                 end_date=args.end_date,
             )
-            parameters = _parse_indicator_params(args.param)
+            try:
+                parameters = _parse_indicator_params(args.param)
+            except ValueError as exc:
+                raise CommandUsageError(str(exc)) from exc
             logger.info(
                 f"Running indicator command: indicator={indicator_key} "
                 f"security={security_id.ticker} start={start_date} end={end_date} "
@@ -195,6 +199,8 @@ def _parse_indicator_params(values: list[str] | list[list[str]]) -> dict[str, ob
             raise ValueError(
                 f"Indicator parameter must use key=value format, got {raw_value!r}."
             )
+        if key in parameters:
+            raise ValueError(f"Duplicate indicator parameter key {key!r}.")
         parameters[key] = _coerce_param_value(value)
     return parameters
 

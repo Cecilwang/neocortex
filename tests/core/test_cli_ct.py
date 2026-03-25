@@ -917,6 +917,44 @@ def test_cli_indicator_supports_multiple_values_after_one_param_flag(
     assert payload["parameters"] == {"fast_window": 10, "slow_window": 20}
 
 
+def test_cli_indicator_rejects_duplicate_param_keys(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex.commands import indicator as indicator_commands
+
+    _reset_fake_provider_state()
+    monkeypatch.setattr(
+        indicator_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+
+    exit_code = cli.main(
+        [
+            "indicator",
+            "macd",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+            "--symbol",
+            "600519",
+            "--start-date",
+            "2026-03-14",
+            "--end-date",
+            "2026-03-15",
+            "--param",
+            "fast_window=10",
+            "fast_window=20",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Duplicate indicator parameter key 'fast_window'." in capsys.readouterr().err
+
+
 def test_cli_db_query_command_prints_json_output_from_registry(
     tmp_path,
     capsys,

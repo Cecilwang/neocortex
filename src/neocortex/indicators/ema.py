@@ -8,6 +8,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
@@ -21,6 +22,8 @@ class EMAParams(IndicatorParams):
     window: int = 20
 
     def __post_init__(self) -> None:
+        if not isinstance(self.window, int):
+            raise ValueError("window must be an integer.")
         if self.window <= 0:
             raise ValueError("window must be a positive integer.")
 
@@ -45,7 +48,7 @@ class EMAIndicator(IndicatorSpec):
         *,
         parameters: EMAParams | dict[str, object] | None = None,
     ) -> EMA:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(EMAParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -98,16 +101,4 @@ def calculate_ema_series(values: pd.Series, window: int) -> pd.Series:
         ema = (alpha * float(value)) + ((1 - alpha) * ema)
         ema_values.append(ema)
     return pd.Series(ema_values, dtype=object)
-
-
-def _coerce_params(parameters: EMAParams | dict[str, object] | None) -> EMAParams:
-    if parameters is None:
-        return EMAParams()
-    if isinstance(parameters, EMAParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return EMAParams.from_dict(parameters)
-    raise TypeError("EMAIndicator parameters must be EMAParams, dict, or None.")
-
-
 ema = EMAIndicator()

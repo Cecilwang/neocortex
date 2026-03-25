@@ -9,6 +9,7 @@ from neocortex.indicators.core import (
     Indicator,
     IndicatorParams,
     IndicatorSpec,
+    coerce_indicator_params,
     log_indicator_calculation,
 )
 from neocortex.indicators.ema import calculate_ema_series
@@ -26,6 +27,12 @@ class MACDParams(IndicatorParams):
     normalization: Literal["close", "slow", "fast"] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fast_window, int):
+            raise ValueError("fast_window must be an integer.")
+        if not isinstance(self.slow_window, int):
+            raise ValueError("slow_window must be an integer.")
+        if not isinstance(self.signal_window, int):
+            raise ValueError("signal_window must be an integer.")
         if self.fast_window <= 0:
             raise ValueError("fast_window must be a positive integer.")
         if self.slow_window <= 0:
@@ -56,7 +63,7 @@ class MACDIndicator(IndicatorSpec):
         *,
         parameters: MACDParams | dict[str, object] | None = None,
     ) -> MACD:
-        resolved_parameters = _coerce_params(parameters)
+        resolved_parameters = coerce_indicator_params(MACDParams, parameters)
         log_indicator_calculation(
             indicator_key=self.key,
             bars=bars,
@@ -154,16 +161,4 @@ class MACD(Indicator):
     @property
     def hist(self) -> pd.Series:
         return self.data["hist"]
-
-
-def _coerce_params(parameters: MACDParams | dict[str, object] | None) -> MACDParams:
-    if parameters is None:
-        return MACDParams()
-    if isinstance(parameters, MACDParams):
-        return parameters
-    if isinstance(parameters, dict):
-        return MACDParams.from_dict(parameters)
-    raise TypeError("MACDIndicator parameters must be MACDParams, dict, or None.")
-
-
 macd = MACDIndicator()

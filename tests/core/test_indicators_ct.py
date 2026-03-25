@@ -461,12 +461,21 @@ def test_calculate_indicator_returns_empty_series_for_empty_input() -> None:
     [
         ("unknown", None),
         ("sma", {"window": 0}),
+        ("sma", {"window": "3"}),
         ("ema", {"window": -1}),
+        ("ema", {"window": 3.5}),
         ("roc", {"period": 0}),
+        ("roc", {"period": []}),
         ("rsi", {"period": 0}),
+        ("rsi", {"period": "7"}),
         ("kdj", {"window": 0}),
         ("kdj", {"window": 9, "signal_window": 0}),
+        ("kdj", {"window": 9, "signal_window": "3"}),
         ("macd", {"fast_window": 5, "slow_window": 5, "signal_window": 2}),
+        (
+            "macd",
+            {"fast_window": "3", "slow_window": 5, "signal_window": 2},
+        ),
         (
             "macd",
             {
