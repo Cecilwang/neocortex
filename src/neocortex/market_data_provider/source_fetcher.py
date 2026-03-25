@@ -141,7 +141,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         if not fetched:
             raise KeyError(market)
         self.store.macro_points.upsert_many(fetched, fetched_at=utc_now_iso())
-        return tuple(macro_point_from_record(record, market) for record in fetched)
+        return tuple(macro_point_from_record(record) for record in fetched)
 
     @route_by_source(RESOURCE_DAILY_PRICE_BARS)
     def get_raw_daily_records(

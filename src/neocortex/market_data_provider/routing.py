@@ -13,6 +13,7 @@ from neocortex.models import Market
 from neocortex.storage.market_store import MarketDataStore
 
 logger = logging.getLogger(__name__)
+RETRYABLE_SOURCE_ERRORS = (KeyError, NotImplementedError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +97,7 @@ def route_by_source(resource_type: str):
                         f"source={source_name} target={target}"
                     )
                     return result
-                except Exception as exc:
+                except RETRYABLE_SOURCE_ERRORS as exc:
                     logger.info(
                         f"{method_name} failed: resource={resource_type} "
                         f"source={source_name} target={target} error={exc}"

@@ -6,7 +6,11 @@ import pytest
 import neocortex.market_data_provider.source_fetcher as source_fetcher_module
 from tests.core._market_data_provider_fakes import FakeSourceConnector
 
-from neocortex.connectors.types import DailyPriceBarRecord, TradingDateRecord
+from neocortex.connectors.types import (
+    DailyPriceBarRecord,
+    SecurityProfileSnapshot,
+    TradingDateRecord,
+)
 from neocortex.market_data_provider import (
     RESOURCE_COMPANY_PROFILE,
     RESOURCE_DAILY_PRICE_BARS,
@@ -18,7 +22,9 @@ from neocortex.models import Exchange, Market, SecurityId
 from neocortex.storage.market_store import MarketDataStore
 
 
-def test_source_route_fetcher_aggregates_failures_across_sources(tmp_path) -> None:
+def test_source_route_fetcher_aggregates_retryable_failures_across_sources(
+    tmp_path,
+) -> None:
     store = MarketDataStore(tmp_path / "market.sqlite3")
     store.ensure_schema()
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
@@ -26,7 +32,7 @@ def test_source_route_fetcher_aggregates_failures_across_sources(tmp_path) -> No
         store=store,
         source_connectors={
             "baostock": FakeSourceConnector(profile_error=NotImplementedError()),
-            "efinance": FakeSourceConnector(profile_error=ValueError("bad payload")),
+            "efinance": FakeSourceConnector(profile_error=KeyError(security_id)),
         },
         source_priority={
             Market.CN: {RESOURCE_COMPANY_PROFILE: ("baostock", "efinance")},
@@ -38,6 +44,34 @@ def test_source_route_fetcher_aggregates_failures_across_sources(tmp_path) -> No
 
     assert exc_info.value.resource_type == RESOURCE_COMPANY_PROFILE
     assert exc_info.value.target == security_id
+
+
+def test_source_route_fetcher_surfaces_non_retryable_source_errors(tmp_path) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+    later_source = FakeSourceConnector(
+        profile=SecurityProfileSnapshot(
+            source="efinance",
+            security_id=security_id,
+            provider_company_name="should-not-be-called",
+        )
+    )
+    fetcher = SourceRouteFetcher(
+        store=store,
+        source_connectors={
+            "baostock": FakeSourceConnector(profile_error=ValueError("bad payload")),
+            "efinance": later_source,
+        },
+        source_priority={
+            Market.CN: {RESOURCE_COMPANY_PROFILE: ("baostock", "efinance")},
+        },
+    )
+
+    with pytest.raises(ValueError, match="bad payload"):
+        fetcher.get_company_profile(security_id=security_id)
+
+    assert later_source.profile_calls == 0
 
 
 def test_source_route_fetcher_fetches_and_persists_trading_dates(tmp_path) -> None:

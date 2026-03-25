@@ -214,10 +214,9 @@ def disclosure_from_record(record: DisclosureSectionRecord) -> DisclosureSection
 
 def macro_point_from_record(
     record: MacroPointRecord,
-    market: Market,
 ) -> MacroSeriesPoint:
     return MacroSeriesPoint(
-        market=market,
+        market=record.market,
         series_name=record.series_name,
         observed_at=date.fromisoformat(record.observed_at),
         value=record.value,
@@ -256,10 +255,10 @@ def resolve_effective_daily_range(
         effective_end_date = end_date
     if effective_start_date > effective_end_date:
         logger.info(
-            f"Effective daily range fallback to requested bounds: source={source_name} "
-            f"market={market.value} requested_start={start_date} "
-            f"requested_end={end_date} effective_start={effective_start_date} "
-            f"effective_end={effective_end_date}"
+            "Effective daily range fallback to requested bounds because trading-date "
+            f"coverage is missing: source={source_name} market={market.value} "
+            f"requested_start={start_date} requested_end={end_date} "
+            f"effective_start={effective_start_date} effective_end={effective_end_date}"
         )
         return start_date, end_date
     logger.info(

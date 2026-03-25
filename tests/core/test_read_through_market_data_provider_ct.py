@@ -244,7 +244,7 @@ def test_read_through_provider_uses_direct_adjusted_daily_without_writing_db(
     assert store.dump_table("daily_price_bars") == []
 
 
-def test_read_through_provider_falls_back_to_direct_adjusted_after_factor_path_failure(
+def test_read_through_provider_falls_back_to_direct_adjusted_after_retryable_factor_path_failure(
     tmp_path,
     cn_security_id: SecurityId,
 ) -> None:
@@ -263,7 +263,7 @@ def test_read_through_provider_falls_back_to_direct_adjusted_after_factor_path_f
                 volume=100.0,
             ),
         ),
-        factor_error=ValueError("bad factor payload"),
+        factor_error=KeyError(cn_security_id),
         adjusted_daily_records=(
             DailyPriceBarRecord(
                 source="baostock",
@@ -298,6 +298,57 @@ def test_read_through_provider_falls_back_to_direct_adjusted_after_factor_path_f
     assert fallback_connector.adjusted_daily_calls == 1
 
 
+def test_read_through_provider_surfaces_non_retryable_adjustment_errors(
+    tmp_path,
+    cn_security_id: SecurityId,
+) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={
+            "baostock": FakeSourceConnector(
+                daily_records=(
+                    DailyPriceBarRecord(
+                        source="baostock",
+                        security_id=cn_security_id,
+                        trade_date="2026-01-05",
+                        open=10.0,
+                        high=11.0,
+                        low=9.0,
+                        close=10.0,
+                        volume=100.0,
+                    ),
+                ),
+                factor_error=ValueError("bad factor payload"),
+                adjusted_daily_records=(
+                    DailyPriceBarRecord(
+                        source="baostock",
+                        security_id=cn_security_id,
+                        trade_date="2026-01-05",
+                        open=20.0,
+                        high=21.0,
+                        low=19.0,
+                        close=20.5,
+                        volume=100.0,
+                    ),
+                ),
+            ),
+        },
+        source_priority={
+            Market.CN: {RESOURCE_DAILY_PRICE_BARS: ("baostock",)},
+        },
+    )
+
+    with pytest.raises(ValueError, match="bad factor payload"):
+        provider.get_price_bars(
+            cn_security_id,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+            adjust="qfq",
+        )
+
+
 def test_read_through_provider_raises_when_no_adjusted_path_is_available(
     tmp_path,
     cn_security_id: SecurityId,
@@ -330,7 +381,7 @@ def test_read_through_provider_raises_when_no_adjusted_path_is_available(
     assert exc_info.value.target == cn_security_id
 
 
-def test_read_through_provider_aggregate_error_contains_multiple_source_failures(
+def test_read_through_provider_aggregate_error_contains_multiple_retryable_source_failures(
     tmp_path,
     cn_security_id: SecurityId,
 ) -> None:
@@ -340,9 +391,7 @@ def test_read_through_provider_aggregate_error_contains_multiple_source_failures
         store=store,
         source_connectors={
             "baostock": FakeSourceConnector(profile_error=KeyError(cn_security_id)),
-            "efinance": FakeSourceConnector(
-                profile_error=ValueError("bad profile payload")
-            ),
+            "efinance": FakeSourceConnector(profile_error=NotImplementedError()),
         },
         source_priority={
             Market.CN: {RESOURCE_COMPANY_PROFILE: ("baostock", "efinance")},
@@ -354,6 +403,36 @@ def test_read_through_provider_aggregate_error_contains_multiple_source_failures
 
     assert exc_info.value.resource_type == RESOURCE_COMPANY_PROFILE
     assert exc_info.value.target == cn_security_id
+
+
+def test_read_through_provider_surfaces_non_retryable_profile_errors(
+    tmp_path,
+    cn_security_id: SecurityId,
+) -> None:
+    store = MarketDataStore(tmp_path / "market.sqlite3")
+    store.ensure_schema()
+    later_source = FakeSourceConnector(
+        profile=SecurityProfileSnapshot(
+            source="efinance",
+            security_id=cn_security_id,
+            provider_company_name="should-not-be-called",
+        )
+    )
+    provider = ReadThroughMarketDataProvider(
+        store=store,
+        source_connectors={
+            "baostock": FakeSourceConnector(profile_error=ValueError("bad profile payload")),
+            "efinance": later_source,
+        },
+        source_priority={
+            Market.CN: {RESOURCE_COMPANY_PROFILE: ("baostock", "efinance")},
+        },
+    )
+
+    with pytest.raises(ValueError, match="bad profile payload"):
+        provider.get_company_profile(cn_security_id)
+
+    assert later_source.profile_calls == 0
 
 
 def test_read_through_provider_does_not_write_back_current_day_daily(

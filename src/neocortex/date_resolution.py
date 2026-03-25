@@ -7,7 +7,7 @@ from datetime import date, datetime, time
 import logging
 from zoneinfo import ZoneInfo
 
-from neocortex.market_data_provider import ReadThroughMarketDataProvider
+from neocortex.market_data_provider.base import MarketDataProvider
 from neocortex.models import Market
 
 
@@ -31,7 +31,7 @@ def _beijing_now(now: datetime | None = None) -> datetime:
 def default_end_date(
     *,
     market: Market,
-    provider: ReadThroughMarketDataProvider | None = None,
+    provider: MarketDataProvider | None = None,
     now: datetime | None = None,
 ) -> date:
     if market is not Market.CN:
@@ -69,7 +69,7 @@ def default_start_date(*, end_date: date | None = None) -> date:
 def resolve_date_range(
     *,
     market: Market,
-    provider: ReadThroughMarketDataProvider | None = None,
+    provider: MarketDataProvider | None = None,
     start_date: date | None,
     end_date: date | None,
     now: datetime | None = None,
@@ -96,7 +96,7 @@ def resolve_date_range(
 def resolve_as_of_date(
     *,
     market: Market,
-    provider: ReadThroughMarketDataProvider | None = None,
+    provider: MarketDataProvider | None = None,
     as_of_date: date | None,
     now: datetime | None = None,
 ) -> date:

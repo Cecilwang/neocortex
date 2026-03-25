@@ -106,7 +106,7 @@ class DBRouteReader(SourceRoutedComponent):
         )
         if not records:
             raise KeyError(market)
-        return tuple(macro_point_from_record(record, market) for record in records)
+        return tuple(macro_point_from_record(record) for record in records)
 
     @route_by_source(RESOURCE_DAILY_PRICE_BARS)
     def get_raw_daily_records(

@@ -23,6 +23,7 @@ from neocortex.market_data_provider.base import (
 )
 from neocortex.market_data_provider.db_reader import DBRouteReader
 from neocortex.market_data_provider.routing import (
+    RETRYABLE_SOURCE_ERRORS,
     route_by_source,
     route_read_through,
 )
@@ -259,7 +260,7 @@ class ReadThroughMarketDataProvider(MarketDataProvider):
                     adjustment_type=adjust,
                     raw_daily_records=raw_daily_records,
                 )
-            except Exception:
+            except RETRYABLE_SOURCE_ERRORS:
                 if not connector.supports_adjusted_daily_bars:
                     raise
                 logger.info(
