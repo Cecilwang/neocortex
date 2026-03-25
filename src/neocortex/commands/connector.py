@@ -157,7 +157,7 @@ def build_connector_command_specs(
                     description=summary,
                     exposure=Exposure.SHARED,
                     auth=AuthPolicy.PUBLIC,
-                    execution=ExecutionMode.SYNC,
+                    execution_mode=ExecutionMode.SYNC,
                     configure_parser=configure_parser,
                     handler=handler,
                 )

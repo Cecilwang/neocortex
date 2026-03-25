@@ -46,9 +46,37 @@ def _build_async_cli_registry() -> CommandRegistry:
             description="Run one async demo command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.ASYNC,
+            execution_mode=ExecutionMode.ASYNC,
             configure_parser=configure_parser,
             handler=handler,
+        )
+    )
+    return registry
+
+
+def _build_policy_cli_registry() -> CommandRegistry:
+    registry = CommandRegistry()
+
+    def configure_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--all", action="store_true")
+
+    def handler(args: argparse.Namespace, context) -> CommandResult:
+        _ = context
+        return CommandResult.text(f"policy:{args.all}")
+
+    registry.register(
+        CommandSpec(
+            id=("demo", "policy"),
+            summary="Run one policy demo command.",
+            description="Run one policy demo command.",
+            exposure=Exposure.SHARED,
+            auth=AuthPolicy.PUBLIC,
+            execution_mode=ExecutionMode.SYNC,
+            configure_parser=configure_parser,
+            handler=handler,
+            execution_policy=lambda args: (
+                ExecutionMode.ASYNC if args.all else ExecutionMode.SYNC
+            ),
         )
     )
     return registry
@@ -257,6 +285,45 @@ def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> Non
     assert client.messages[1] == (
         "oc_test_chat",
         "Job 1 succeeded.\nasync:alpha",
+    )
+
+
+def test_cli_execution_policy_switches_between_sync_and_async(tmp_path, monkeypatch) -> None:
+    from neocortex.feishu import service as feishu_service
+
+    client = FakeClient()
+    store = FeishuBotStore(tmp_path / "jobs.sqlite3")
+    service = FeishuBotService(
+        _settings(tmp_path),
+        client=client,
+        store=store,
+        executor=ImmediateExecutor(),
+    )
+    monkeypatch.setattr(
+        feishu_service,
+        "build_command_registry",
+        _build_policy_cli_registry,
+    )
+
+    service.handle_event_payload(
+        _activated_group_message_event(text="cli demo policy")
+    )
+    service.handle_event_payload(
+        _activated_group_message_event(
+            text="cli demo policy --all",
+            event_id="evt-2",
+            message_id="msg-2",
+        )
+    )
+
+    assert client.messages[0] == ("oc_test_chat", "policy:False")
+    assert client.messages[1] == (
+        "oc_test_chat",
+        "Accepted job 1: demo policy. Use `job 1` to query status.",
+    )
+    assert client.messages[2] == (
+        "oc_test_chat",
+        "Job 1 succeeded.\npolicy:True",
     )
 
 

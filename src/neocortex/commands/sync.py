@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 _CN_TRADING_DATE_SYNC_START = date(1990, 12, 19)
 
 
+def _sync_bars_execution_policy(args: argparse.Namespace) -> ExecutionMode:
+    if args.all_securities:
+        return ExecutionMode.ASYNC
+    return ExecutionMode.SYNC
+
+
 def _flatten_ticker_values(
     ticker_groups: list[str] | list[list[str]] | None,
 ) -> tuple[str, ...]:
@@ -74,7 +80,7 @@ def build_sync_securities_command_spec(
         description="Sync the visible security universe for one market.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -184,9 +190,10 @@ def build_sync_bars_command_spec(
         description="Sync raw daily price bars into the local market-data store.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
+        execution_policy=_sync_bars_execution_policy,
     )
 
 
@@ -227,7 +234,7 @@ def build_sync_trading_dates_command_spec(
         description="Sync the full CN trading-date calendar into the local store.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )

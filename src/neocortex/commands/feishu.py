@@ -44,7 +44,7 @@ def build_feishu_longconn_command_spec() -> CommandSpec:
         description="Start the Feishu long-connection bot runner.",
         exposure=Exposure.CLI_ONLY,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=_handle_feishu_longconn,
     )
@@ -90,7 +90,7 @@ def build_feishu_cleanup_command_spec(*, default_db_path: str) -> CommandSpec:
         description="Delete old Feishu receipts and terminal jobs.",
         exposure=Exposure.CLI_ONLY,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=_handle_feishu_cleanup,
     )

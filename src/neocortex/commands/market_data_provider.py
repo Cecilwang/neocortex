@@ -72,7 +72,7 @@ def build_market_data_provider_init_db_command_spec(
         description="Initialize the local market data database schema.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -117,7 +117,7 @@ def build_market_data_provider_securities_command_spec(
         description="List securities from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -172,7 +172,7 @@ def build_market_data_provider_bars_command_spec(
         description="Fetch historical price bars from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -215,7 +215,7 @@ def build_market_data_provider_fundamentals_command_spec(
         description="Fetch fundamental snapshots from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -244,7 +244,7 @@ def build_market_data_provider_profile_command_spec(
         description="Fetch one company profile from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -287,7 +287,7 @@ def build_market_data_provider_disclosures_command_spec(
         description="Fetch disclosure sections from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -333,7 +333,7 @@ def build_market_data_provider_macro_command_spec(
         description="Fetch macro points from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -405,7 +405,7 @@ def build_market_data_provider_trading_dates_command_spec(
         description="Fetch trading-date records from the runtime market data provider.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )

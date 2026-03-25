@@ -28,7 +28,7 @@ def test_cli_dispatches_registry_managed_root(monkeypatch, capsys) -> None:
             description="Run registry command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.SYNC,
+            execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
             handler=_demo_handler,
         )
@@ -63,7 +63,7 @@ def test_cli_registry_help_returns_zero(monkeypatch, capsys) -> None:
             description="Run registry command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.SYNC,
+            execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
             handler=_demo_handler,
         )
@@ -94,7 +94,7 @@ def test_cli_fully_managed_root_help_uses_registry(monkeypatch, capsys) -> None:
             description="Run registry command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.SYNC,
+            execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
             handler=_demo_handler,
         )
@@ -132,7 +132,7 @@ def test_cli_registry_usage_error_returns_two(monkeypatch, capsys) -> None:
             description="Run registry command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.SYNC,
+            execution_mode=ExecutionMode.SYNC,
             configure_parser=configure_parser,
             handler=_demo_handler,
         )
@@ -165,7 +165,7 @@ def test_cli_unknown_subcommand_returns_registry_usage_error(
             description="Run registry command.",
             exposure=Exposure.SHARED,
             auth=AuthPolicy.PUBLIC,
-            execution=ExecutionMode.SYNC,
+            execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
             handler=_demo_handler,
         )

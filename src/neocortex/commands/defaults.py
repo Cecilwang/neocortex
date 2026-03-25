@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def build_command_registry() -> CommandRegistry:
     """Build the default command registry."""
 
-    logger.info("Building default command registry.")
+    logger.debug("Building default command registry.")
     app_config = get_config()
     default_db_path = str(app_config.storage.market_data_db_path)
     default_bot_db_path = str(app_config.storage.bot_db_path)

@@ -60,7 +60,7 @@ def build_db_query_command_spec(*, default_db_path: str) -> CommandSpec:
         description="Run a read-only SQLite query against the local market DB.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )

@@ -6,7 +6,6 @@ from datetime import date, datetime
 import pytest
 
 from tests.core.feishu_storage_test_support import seed_cleanup_test_data
-from neocortex.cli.common import find_security_ids_by_name
 from neocortex.connectors.types import SecurityListing, TradingDateRecord
 from neocortex.models import (
     AgentRequest,
@@ -17,6 +16,7 @@ from neocortex.models import (
     PriceSeries,
     SecurityId,
 )
+from neocortex.security_resolution import find_security_ids_by_name
 from neocortex.storage import MarketDataStore
 
 
@@ -551,9 +551,9 @@ def test_cli_connector_daily_defaults_to_today_and_ten_year_lookback(
 
 
 def test_default_end_date_for_cn_uses_previous_trading_day_before_close() -> None:
-    from neocortex.cli import common as cli_common
+    from neocortex import date_resolution
 
-    end_date = cli_common.default_end_date(
+    end_date = date_resolution.default_end_date(
         market=Market.CN,
         provider=FakeProvider(),
         now=datetime(2026, 3, 20, 18, 29),
@@ -563,9 +563,9 @@ def test_default_end_date_for_cn_uses_previous_trading_day_before_close() -> Non
 
 
 def test_default_end_date_for_cn_uses_today_after_close() -> None:
-    from neocortex.cli import common as cli_common
+    from neocortex import date_resolution
 
-    end_date = cli_common.default_end_date(
+    end_date = date_resolution.default_end_date(
         market=Market.CN,
         provider=FakeProvider(),
         now=datetime(2026, 3, 20, 18, 30),
@@ -575,9 +575,9 @@ def test_default_end_date_for_cn_uses_today_after_close() -> None:
 
 
 def test_default_end_date_for_cn_uses_previous_trading_day_on_non_trading_day() -> None:
-    from neocortex.cli import common as cli_common
+    from neocortex import date_resolution
 
-    end_date = cli_common.default_end_date(
+    end_date = date_resolution.default_end_date(
         market=Market.CN,
         provider=FakeProvider(),
         now=datetime(2026, 3, 21, 12, 0),

@@ -247,7 +247,8 @@ class FeishuBotService:
 
         context = self._build_command_context(event)
         dispatcher = CommandDispatcher()
-        if invocation.spec.execution.value == "async":
+        execution_mode = invocation.spec.get_execution_mode(invocation.args)
+        if execution_mode.value == "async":
             job = self.store.create_job(
                 command_name=invocation.spec.path,
                 command_text=request.text,

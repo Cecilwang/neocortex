@@ -131,6 +131,7 @@ class CommandResult:
 
 CommandHandler = Callable[[argparse.Namespace, CommandContext], CommandResult]
 ConfigureParser = Callable[[argparse.ArgumentParser], None]
+ExecutionPolicy = Callable[[argparse.Namespace], ExecutionMode]
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,13 +143,19 @@ class CommandSpec:
     description: str
     exposure: Exposure
     auth: AuthPolicy
-    execution: ExecutionMode
+    execution_mode: ExecutionMode
     configure_parser: ConfigureParser
     handler: CommandHandler
+    execution_policy: ExecutionPolicy | None = None
 
     @property
     def path(self) -> str:
         return " ".join(self.id)
+
+    def get_execution_mode(self, args: argparse.Namespace) -> ExecutionMode:
+        if self.execution_policy is None:
+            return self.execution_mode
+        return self.execution_policy(args)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,7 +195,7 @@ class CommandHelpRequested(CommandError):
 
 
 class CommandArgumentParser(argparse.ArgumentParser):
-    """Argument parser that reports help and usage as exceptions."""
+    """Argument parser that never prints directly and reports help/usage via exceptions."""
 
     def _print_message(self, message: str | None, file=None) -> None:  # type: ignore[override]
         _ = message, file
@@ -219,9 +226,9 @@ class CommandRegistry:
     def register(self, spec: CommandSpec) -> None:
         if spec.id in self._specs:
             raise ValueError(f"Command {spec.path!r} is already registered.")
-        logger.info(
+        logger.debug(
             f"Registering command spec: path={spec.path} auth={spec.auth.value} "
-            f"execution={spec.execution.value} exposure={spec.exposure.value}"
+            f"execution={spec.execution_mode.value} exposure={spec.exposure.value}"
         )
         self._specs[spec.id] = spec
 
@@ -281,9 +288,10 @@ class CommandDispatcher:
         context: CommandContext,
     ) -> CommandResult:
         spec = invocation.spec
+        execution_mode = spec.get_execution_mode(invocation.args)
         logger.info(
             f"Dispatching [{spec.path}] source={context.actor.source.value} "
-            f"auth={spec.auth.value} execution={spec.execution.value}"
+            f"auth={spec.auth.value} execution={execution_mode.value}"
         )
         if spec.auth is AuthPolicy.ADMIN and not context.actor.is_admin:
             logger.warning(

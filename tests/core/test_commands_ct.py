@@ -29,7 +29,7 @@ def _demo_handler(args: argparse.Namespace, context: CommandContext) -> CommandR
 def _demo_spec(
     *,
     auth: AuthPolicy = AuthPolicy.PUBLIC,
-    execution: ExecutionMode = ExecutionMode.SYNC,
+    execution_mode: ExecutionMode = ExecutionMode.SYNC,
     require_target_source: bool = False,
 ) -> CommandSpec:
     def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -60,7 +60,7 @@ def _demo_spec(
         description="Run a demo command with typed arguments.",
         exposure=Exposure.SHARED,
         auth=auth,
-        execution=execution,
+        execution_mode=execution_mode,
         configure_parser=configure_parser,
         handler=_demo_handler,
     )
@@ -80,7 +80,7 @@ def _inspect_spec(
         description=description,
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=_demo_handler,
     )
@@ -199,7 +199,7 @@ def test_command_dispatcher_enforces_auth_and_logs_execution(caplog) -> None:
     registry = CommandRegistry()
     spec = _demo_spec(
         auth=AuthPolicy.ADMIN,
-        execution=ExecutionMode.ASYNC,
+        execution_mode=ExecutionMode.ASYNC,
     )
     registry.register(spec)
     matched_spec, args = _parse_invocation(registry, ["demo", "run", "alpha"])
@@ -261,3 +261,42 @@ def test_command_registry_logs_decisions_without_raw_tokens(caplog) -> None:
 
     assert "Dispatching [demo run]" in caplog.text
     assert "secret-symbol" not in caplog.text
+
+
+def test_command_spec_execution_policy_overrides_static_mode(caplog) -> None:
+    registry = CommandRegistry()
+
+    def configure_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--all", action="store_true")
+
+    registry.register(
+        CommandSpec(
+            id=("demo", "policy"),
+            summary="Run a policy demo command.",
+            description="Run a policy demo command.",
+            exposure=Exposure.SHARED,
+            auth=AuthPolicy.PUBLIC,
+            execution_mode=ExecutionMode.SYNC,
+            configure_parser=configure_parser,
+            handler=lambda args, context: CommandResult.text(
+                f"{context.actor.source.value}:{args.all}"
+            ),
+            execution_policy=lambda args: (
+                ExecutionMode.ASYNC if args.all else ExecutionMode.SYNC
+            ),
+        )
+    )
+    matched_spec, args = _parse_invocation(registry, ("demo", "policy", "--all"))
+    context = CommandContext(
+        actor=CommandActor(source=InvocationSource.FEISHU, is_admin=True),
+        request_id="feishu",
+    )
+
+    with caplog.at_level("INFO"):
+        result = CommandDispatcher().dispatch(
+            ParsedInvocation(spec=matched_spec, args=args),
+            context,
+        )
+
+    assert result.presentation.text == "feishu:True"
+    assert "execution=async" in caplog.text

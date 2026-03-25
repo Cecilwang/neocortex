@@ -71,7 +71,7 @@ def build_indicator_list_command_spec() -> CommandSpec:
         description="List supported indicators.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
@@ -182,7 +182,7 @@ def build_indicator_command_specs(
                 description=f"Calculate the {indicator.display_name} indicator.",
                 exposure=Exposure.SHARED,
                 auth=AuthPolicy.PUBLIC,
-                execution=ExecutionMode.SYNC,
+                execution_mode=ExecutionMode.SYNC,
                 configure_parser=configure_parser,
                 handler=handler,
             )

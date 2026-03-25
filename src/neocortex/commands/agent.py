@@ -81,7 +81,7 @@ def build_agent_render_command_spec(
         description="Render one agent request and its prompts.",
         exposure=Exposure.SHARED,
         auth=AuthPolicy.PUBLIC,
-        execution=ExecutionMode.SYNC,
+        execution_mode=ExecutionMode.SYNC,
         configure_parser=configure_parser,
         handler=handler,
     )
