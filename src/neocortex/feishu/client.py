@@ -32,23 +32,75 @@ class FeishuClient:
         self._owns_http_client = http_client is None
         self._tenant_access_token: str | None = None
         self._token_deadline: float = 0.0
+        self._bot_open_id: str | None = None
         logger.info(f"Initialized FeishuClient: base_url={settings.base_url}")
 
-    def send_text(self, *, chat_id: str, text: str) -> None:
+    def send_text(
+        self,
+        *,
+        chat_id: str,
+        text: str,
+        reply_to_message_id: str | None = None,
+        reply_in_thread: bool = False,
+    ) -> None:
         """Send one text message into the target chat."""
 
-        logger.info(f"Calling Feishu send_message API for chat_id={chat_id}")
         payload = {
-            "receive_id": chat_id,
-            "msg_type": "text",
             "content": json.dumps({"text": text}, ensure_ascii=False),
+            "msg_type": "text",
             "uuid": str(uuid4()),
         }
+        if reply_to_message_id:
+            logger.info(
+                "Calling Feishu reply_message API for message_id=%s chat_id=%s reply_in_thread=%s",
+                reply_to_message_id,
+                chat_id,
+                reply_in_thread,
+            )
+            payload["reply_in_thread"] = reply_in_thread
+            self._request(
+                "POST",
+                f"/open-apis/im/v1/messages/{reply_to_message_id}/reply",
+                json=payload,
+            )
+            return
+
+        logger.info(f"Calling Feishu send_message API for chat_id={chat_id}")
+        payload["receive_id"] = chat_id
         self._request(
             "POST",
             "/open-apis/im/v1/messages",
             params={"receive_id_type": "chat_id"},
             json=payload,
+        )
+
+    def get_bot_open_id(self) -> str:
+        """Resolve and cache the current bot open_id from Feishu."""
+
+        if self._bot_open_id is not None:
+            return self._bot_open_id
+
+        document = self._request("GET", "/open-apis/bot/v3/info")
+        candidates: list[dict[str, object]] = []
+        data = document.get("data")
+        if isinstance(data, dict):
+            bot = data.get("bot")
+            if isinstance(bot, dict):
+                candidates.append(bot)
+            candidates.append(data)
+        bot = document.get("bot")
+        if isinstance(bot, dict):
+            candidates.append(bot)
+
+        for candidate in candidates:
+            open_id = candidate.get("open_id")
+            if isinstance(open_id, str) and open_id:
+                self._bot_open_id = open_id
+                logger.info(f"Resolved Feishu bot open_id from bot info API: {open_id}")
+                return open_id
+
+        raise RuntimeError(
+            f"Feishu bot info response did not include open_id: {document}"
         )
 
     def _request(

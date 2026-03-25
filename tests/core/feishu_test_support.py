@@ -5,11 +5,29 @@ from __future__ import annotations
 
 class FakeClient:
     def __init__(self) -> None:
-        self.messages: list[tuple[str, str]] = []
+        self.messages: list[dict[str, object]] = []
         self.closed = False
+        self.bot_open_id = "ou_bot"
 
-    def send_text(self, *, chat_id: str, text: str) -> None:
-        self.messages.append((chat_id, text))
+    def send_text(
+        self,
+        *,
+        chat_id: str,
+        text: str,
+        reply_to_message_id: str | None = None,
+        reply_in_thread: bool = False,
+    ) -> None:
+        self.messages.append(
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "reply_to_message_id": reply_to_message_id,
+                "reply_in_thread": reply_in_thread,
+            }
+        )
+
+    def get_bot_open_id(self) -> str:
+        return self.bot_open_id
 
     def close(self) -> None:
         self.closed = True

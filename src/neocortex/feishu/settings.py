@@ -19,7 +19,6 @@ class FeishuSettings:
 
     app_id: str
     app_secret: str
-    bot_open_id: str = ""
     base_url: str = "https://open.feishu.cn"
     db_path: Path = Path("data/feishu_bot.sqlite3")
     admin_open_ids: frozenset[str] = frozenset()
@@ -33,7 +32,6 @@ class FeishuSettings:
         app_config = get_config()
         app_id = os.environ["FEISHU_APP_ID"]
         app_secret = os.environ["FEISHU_APP_SECRET"]
-        bot_open_id = os.environ.get("FEISHU_BOT_OPEN_ID", "")
         admin_open_ids = _split_csv(os.environ.get("FEISHU_ADMIN_OPEN_IDS", ""))
         max_reply_chars = int(os.environ.get("FEISHU_MAX_REPLY_CHARS", "3500"))
         job_workers = int(os.environ.get("FEISHU_JOB_WORKERS", "4"))
@@ -41,7 +39,6 @@ class FeishuSettings:
         return cls(
             app_id=app_id,
             app_secret=app_secret,
-            bot_open_id=bot_open_id,
             base_url=base_url,
             db_path=app_config.storage.bot_db_path,
             admin_open_ids=admin_open_ids,

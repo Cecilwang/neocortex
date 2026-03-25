@@ -9,6 +9,7 @@ from lark_oapi.ws import Client as LongConnectionClient
 
 from neocortex.feishu.service import FeishuBotService
 from neocortex.feishu.settings import FeishuSettings
+from neocortex.serialization import to_pretty_json
 
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ class FeishuLongConnectionRunner:
     def _handle_message_receive_event(self, event: lark.CustomizedEvent) -> None:
         event_id = getattr(event.header, "event_id", None)
         logger.info(f"Received long-connection event: event_id={event_id}")
+        logger.info(
+            "Feishu raw long-connection event: event_id=%s payload=\n%s",
+            event_id,
+            to_pretty_json(event.event),
+        )
         payload = {
             "schema": "2.0",
             "header": {

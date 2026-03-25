@@ -25,14 +25,20 @@ def test_job_state_transitions_round_trip_through_store(tmp_path) -> None:
         command_text="cli demo run",
         chat_id="oc_chat",
         user_open_id="ou_user",
+        reply_to_message_id="om_message",
+        reply_in_thread=True,
     )
     assert queued_job.status is JobStatus.QUEUED
+    assert queued_job.reply_to_message_id == "om_message"
+    assert queued_job.reply_in_thread is True
 
     store.mark_job_running(queued_job.id)
     running_job = store.get_job(queued_job.id)
     assert running_job is not None
     assert running_job.status is JobStatus.RUNNING
     assert running_job.started_at is not None
+    assert running_job.reply_to_message_id == "om_message"
+    assert running_job.reply_in_thread is True
 
     store.mark_job_succeeded(queued_job.id, result_text="done")
     succeeded_job = store.get_job(queued_job.id)

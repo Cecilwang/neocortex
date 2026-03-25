@@ -16,15 +16,28 @@ class JobStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class FeishuMention:
+    """One structured mention extracted from a Feishu message payload."""
+
+    key: str
+    target_id: str
+    id_type: str
+
+
+@dataclass(frozen=True, slots=True)
 class FeishuMessageEvent:
     """Extracted text message event emitted by Feishu."""
 
     event_id: str
     message_id: str
+    thread_id: str
+    parent_id: str
+    root_id: str
     chat_id: str
     chat_type: str
     sender_id: str
     text: str
+    mentions: dict[str, FeishuMention] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +57,8 @@ class FeishuJobRecord:
     command_text: str
     chat_id: str
     user_open_id: str
+    reply_to_message_id: str | None
+    reply_in_thread: bool
     status: JobStatus
     submitted_at: str
     started_at: str | None = None

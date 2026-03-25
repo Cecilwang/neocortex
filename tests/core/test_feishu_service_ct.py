@@ -78,7 +78,6 @@ def _settings(
     return FeishuSettings(
         app_id="app_id",
         app_secret="app_secret",
-        bot_open_id="ou_bot",
         db_path=tmp_path / "feishu.sqlite3",
         admin_open_ids=admins,
     )
@@ -90,7 +89,11 @@ def _message_event(
     chat_type: str = "group",
     event_id: str = "evt-1",
     message_id: str = "msg-1",
+    thread_id: str = "",
+    parent_id: str = "",
+    root_id: str = "",
     sender_open_id: str = "ou_user",
+    mentions: tuple[dict[str, str], ...] = (),
 ) -> dict[str, object]:
     return {
         "schema": "2.0",
@@ -102,10 +105,14 @@ def _message_event(
             "sender": {"sender_id": {"open_id": sender_open_id}},
             "message": {
                 "message_id": message_id,
+                "thread_id": thread_id,
+                "parent_id": parent_id,
+                "root_id": root_id,
                 "chat_id": "oc_test_chat",
                 "chat_type": chat_type,
                 "message_type": "text",
                 "content": json.dumps({"text": text}),
+                "mentions": list(mentions),
             },
         },
     }
@@ -116,12 +123,18 @@ def _activated_group_message_event(
     text: str,
     event_id: str = "evt-1",
     message_id: str = "msg-1",
+    thread_id: str = "",
+    parent_id: str = "",
+    root_id: str = "",
     sender_open_id: str = "ou_user",
 ) -> dict[str, object]:
     return _message_event(
         text=f'<at user_id="ou_bot"></at> {text}',
         event_id=event_id,
         message_id=message_id,
+        thread_id=thread_id,
+        parent_id=parent_id,
+        root_id=root_id,
         sender_open_id=sender_open_id,
     )
 
@@ -142,19 +155,81 @@ def test_p2p_help_message_sends_help_message(tmp_path) -> None:
     service.handle_event_payload(_message_event(text="help", chat_type="p2p"))
 
     assert len(client.messages) == 1
-    assert client.messages[0][0] == "oc_test_chat"
-    assert "Available commands:" in client.messages[0][1]
-    assert "cli <full-cli-command>" in client.messages[0][1]
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert "Available commands:" in client.messages[0]["text"]
+    assert "cli <full-cli-command>" in client.messages[0]["text"]
 
 
-def test_group_placeholder_mention_is_ignored_and_warns(tmp_path, caplog) -> None:
+def test_group_placeholder_mention_matching_mentions_metadata_activates_command(
+    tmp_path,
+) -> None:
     client = FakeClient()
     service = FeishuBotService(_settings(tmp_path), client=client)
 
-    service.handle_event_payload(_message_event(text="@_user_1 help"))
+    service.handle_event_payload(
+        _message_event(
+            text="@_user_1 help",
+            mentions=(
+                {
+                    "key": "@_user_1",
+                    "id": "ou_bot",
+                    "id_type": "open_id",
+                },
+            ),
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert "Available commands:" in client.messages[0]["text"]
+
+
+def test_group_placeholder_mention_matching_nested_mentions_metadata_activates_command(
+    tmp_path,
+) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+
+    service.handle_event_payload(
+        _message_event(
+            text="@_user_1 help",
+            mentions=(
+                {
+                    "key": "@_user_1",
+                    "id": {
+                        "open_id": "ou_bot",
+                        "union_id": "on_bot",
+                        "user_id": None,
+                    },
+                },
+            ),
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert "Available commands:" in client.messages[0]["text"]
+
+
+def test_group_placeholder_mention_without_matching_bot_target_is_ignored(
+    tmp_path, caplog
+) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+
+    service.handle_event_payload(
+        _message_event(
+            text="@_user_1 help",
+            mentions=(
+                {
+                    "key": "@_user_1",
+                    "id": "ou_other_bot",
+                    "id_type": "open_id",
+                },
+            ),
+        )
+    )
 
     assert client.messages == []
-    assert "placeholder mention without at-tag" in caplog.text
+    assert "placeholder mention without matching bot target" in caplog.text
 
 
 def test_group_non_bot_mention_does_not_activate_command(tmp_path) -> None:
@@ -173,8 +248,36 @@ def test_group_at_tag_matching_bot_open_id_activates_command(tmp_path) -> None:
     service.handle_event_payload(_message_event(text='<at user_id="ou_bot"></at> help'))
 
     assert len(client.messages) == 1
-    assert "Available commands:" in client.messages[0][1]
-    assert "cli <full-cli-command>" in client.messages[0][1]
+    assert "Available commands:" in client.messages[0]["text"]
+    assert "cli <full-cli-command>" in client.messages[0]["text"]
+
+
+def test_service_fetches_bot_open_id_when_missing_from_settings(tmp_path) -> None:
+    client = FakeClient()
+    service = FeishuBotService(
+        FeishuSettings(
+            app_id="app_id",
+            app_secret="app_secret",
+            db_path=tmp_path / "feishu.sqlite3",
+        ),
+        client=client,
+    )
+
+    service.handle_event_payload(
+        _message_event(
+            text="@_user_1 help",
+            mentions=(
+                {
+                    "key": "@_user_1",
+                    "id": "ou_bot",
+                    "id_type": "open_id",
+                },
+            ),
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert "Available commands:" in client.messages[0]["text"]
 
 
 def test_cli_route_executes_registry_command(tmp_path) -> None:
@@ -193,8 +296,35 @@ def test_cli_route_executes_registry_command(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert "name" in client.messages[0][1]
-    assert "alpha" in client.messages[0][1]
+    assert "name" in client.messages[0]["text"]
+    assert "alpha" in client.messages[0]["text"]
+
+
+def test_cli_route_replies_in_thread_for_group_thread_message(tmp_path) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+    db_path = tmp_path / "market.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("create table sample_rows (name text)")
+        connection.execute("insert into sample_rows (name) values ('alpha')")
+        connection.commit()
+
+    service.handle_event_payload(
+        _activated_group_message_event(
+            text=f"cli db query --db-path {db_path} --table sample_rows",
+            message_id="om_thread_message",
+            thread_id="omt_thread",
+            parent_id="om_parent",
+            root_id="om_root",
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert "name" in client.messages[0]["text"]
+    assert "alpha" in client.messages[0]["text"]
+    assert client.messages[0]["reply_to_message_id"] == "om_thread_message"
+    assert client.messages[0]["reply_in_thread"] is True
 
 
 def test_p2p_cli_route_executes_registry_command(tmp_path) -> None:
@@ -214,8 +344,8 @@ def test_p2p_cli_route_executes_registry_command(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert "name" in client.messages[0][1]
-    assert "alpha" in client.messages[0][1]
+    assert "name" in client.messages[0]["text"]
+    assert "alpha" in client.messages[0]["text"]
 
 
 def test_cli_route_rejects_cli_only_command(tmp_path) -> None:
@@ -227,7 +357,12 @@ def test_cli_route_rejects_cli_only_command(tmp_path) -> None:
     )
 
     assert client.messages == [
-        ("oc_test_chat", "feishu longconn is only available from the CLI.")
+        {
+            "chat_id": "oc_test_chat",
+            "text": "feishu longconn is only available from the CLI.",
+            "reply_to_message_id": None,
+            "reply_in_thread": False,
+        }
     ]
 
 
@@ -238,8 +373,8 @@ def test_cli_route_reports_usage_error(tmp_path) -> None:
     service.handle_event_payload(_activated_group_message_event(text="cli db query"))
 
     assert len(client.messages) == 1
-    assert "one of the arguments --sql --table is required" in client.messages[0][1]
-    assert "db query" in client.messages[0][1]
+    assert "one of the arguments --sql --table is required" in client.messages[0]["text"]
+    assert "db query" in client.messages[0]["text"]
 
 
 def test_cli_route_reports_handler_stage_usage_error(tmp_path) -> None:
@@ -257,7 +392,7 @@ def test_cli_route_reports_handler_stage_usage_error(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert "Only read-only SELECT queries are allowed." in client.messages[0][1]
+    assert "Only read-only SELECT queries are allowed." in client.messages[0]["text"]
 
 
 def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> None:
@@ -284,14 +419,15 @@ def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> Non
     job = store.get_job(1)
     assert job is not None
     assert job.status.value == "succeeded"
-    assert client.messages[0] == (
-        "oc_test_chat",
-        "Accepted job 1: demo async. Use `job 1` to query status.",
+    assert job.reply_to_message_id is None
+    assert job.reply_in_thread is False
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert (
+        client.messages[0]["text"]
+        == "Accepted job 1: demo async. Use `job 1` to query status."
     )
-    assert client.messages[1] == (
-        "oc_test_chat",
-        "Job 1 succeeded.\nasync:alpha",
-    )
+    assert client.messages[1]["chat_id"] == "oc_test_chat"
+    assert client.messages[1]["text"] == "Job 1 succeeded.\nasync:alpha"
 
 
 def test_cli_execution_policy_switches_between_sync_and_async(
@@ -322,15 +458,54 @@ def test_cli_execution_policy_switches_between_sync_and_async(
         )
     )
 
-    assert client.messages[0] == ("oc_test_chat", "policy:False")
-    assert client.messages[1] == (
-        "oc_test_chat",
-        "Accepted job 1: demo policy. Use `job 1` to query status.",
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert client.messages[0]["text"] == "policy:False"
+    assert client.messages[1]["chat_id"] == "oc_test_chat"
+    assert (
+        client.messages[1]["text"]
+        == "Accepted job 1: demo policy. Use `job 1` to query status."
     )
-    assert client.messages[2] == (
-        "oc_test_chat",
-        "Job 1 succeeded.\npolicy:True",
+    assert client.messages[2]["chat_id"] == "oc_test_chat"
+    assert client.messages[2]["text"] == "Job 1 succeeded.\npolicy:True"
+
+
+def test_cli_async_route_persists_thread_reply_context_and_notifies_in_thread(
+    tmp_path, monkeypatch
+) -> None:
+    from neocortex.feishu import service as feishu_service
+
+    client = FakeClient()
+    store = FeishuBotStore(tmp_path / "jobs.sqlite3")
+    service = FeishuBotService(
+        _settings(tmp_path),
+        client=client,
+        store=store,
+        executor=ImmediateExecutor(),
     )
+    monkeypatch.setattr(
+        feishu_service,
+        "build_command_registry",
+        _build_async_cli_registry,
+    )
+
+    service.handle_event_payload(
+        _activated_group_message_event(
+            text="cli demo async --value alpha",
+            message_id="om_thread_message",
+            thread_id="omt_thread",
+            parent_id="om_parent",
+            root_id="om_root",
+        )
+    )
+
+    job = store.get_job(1)
+    assert job is not None
+    assert job.reply_to_message_id == "om_thread_message"
+    assert job.reply_in_thread is True
+    assert client.messages[0]["reply_to_message_id"] == "om_thread_message"
+    assert client.messages[0]["reply_in_thread"] is True
+    assert client.messages[1]["reply_to_message_id"] == "om_thread_message"
+    assert client.messages[1]["reply_in_thread"] is True
 
 
 def test_job_route_is_handled_directly_by_service(tmp_path, monkeypatch) -> None:
@@ -347,8 +522,8 @@ def test_job_route_is_handled_directly_by_service(tmp_path, monkeypatch) -> None
     service.handle_event_payload(_activated_group_message_event(text="job 1"))
 
     assert len(client.messages) == 1
-    assert "job_id=1" in client.messages[0][1]
-    assert "command=demo async" in client.messages[0][1]
+    assert "job_id=1" in client.messages[0]["text"]
+    assert "command=demo async" in client.messages[0]["text"]
 
 
 def test_normalizer_rejects_message_without_sender_open_id(tmp_path) -> None:
@@ -386,7 +561,14 @@ def test_job_route_reports_usage_for_invalid_job_id(tmp_path) -> None:
 
     service.handle_event_payload(_activated_group_message_event(text="job abc"))
 
-    assert client.messages == [("oc_test_chat", "Usage: job <job-id>")]
+    assert client.messages == [
+        {
+            "chat_id": "oc_test_chat",
+            "text": "Usage: job <job-id>",
+            "reply_to_message_id": None,
+            "reply_in_thread": False,
+        }
+    ]
 
 
 def test_legacy_command_is_rejected_with_help(tmp_path) -> None:
@@ -398,9 +580,9 @@ def test_legacy_command_is_rejected_with_help(tmp_path) -> None:
     )
 
     assert len(client.messages) == 1
-    assert client.messages[0][0] == "oc_test_chat"
-    assert "Invalid command." in client.messages[0][1]
-    assert "cli <full-cli-command>" in client.messages[0][1]
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert "Invalid command." in client.messages[0]["text"]
+    assert "cli <full-cli-command>" in client.messages[0]["text"]
 
 
 def test_slash_neo_prefix_is_rejected(tmp_path) -> None:
@@ -410,8 +592,8 @@ def test_slash_neo_prefix_is_rejected(tmp_path) -> None:
     service.handle_event_payload(_activated_group_message_event(text="/neo help"))
 
     assert len(client.messages) == 1
-    assert "Invalid command." in client.messages[0][1]
-    assert "cli <full-cli-command>" in client.messages[0][1]
+    assert "Invalid command." in client.messages[0]["text"]
+    assert "cli <full-cli-command>" in client.messages[0]["text"]
 
 
 def test_duplicate_event_is_ignored(tmp_path) -> None:
@@ -423,3 +605,24 @@ def test_duplicate_event_is_ignored(tmp_path) -> None:
     service.handle_event_payload(payload)
 
     assert len(client.messages) == 1
+
+
+def test_group_thread_message_replies_in_thread(tmp_path) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+
+    service.handle_event_payload(
+        _activated_group_message_event(
+            text="help",
+            thread_id="omt_123",
+            parent_id="om_parent",
+            root_id="om_root",
+            message_id="om_thread_message",
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert client.messages[0]["chat_id"] == "oc_test_chat"
+    assert "Available commands:" in client.messages[0]["text"]
+    assert client.messages[0]["reply_to_message_id"] == "om_thread_message"
+    assert client.messages[0]["reply_in_thread"] is True

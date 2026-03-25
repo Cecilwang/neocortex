@@ -58,6 +58,8 @@ class FeishuBotStore:
         command_text: str,
         chat_id: str,
         user_open_id: str,
+        reply_to_message_id: str | None = None,
+        reply_in_thread: bool = False,
     ) -> FeishuJobRecord:
         """Create one queued async job."""
 
@@ -69,6 +71,8 @@ class FeishuBotStore:
             command_text=command_text,
             chat_id=chat_id,
             user_open_id=user_open_id,
+            reply_to_message_id=reply_to_message_id,
+            reply_in_thread=reply_in_thread,
             status=JobStatus.QUEUED.value,
             submitted_at=utc_now_iso(),
         )
@@ -188,7 +192,6 @@ class FeishuBotStore:
         )
         return receipts_deleted, jobs_deleted
 
-
 def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:
     return FeishuJobRecord(
         id=row.id,
@@ -196,6 +199,8 @@ def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:
         command_text=row.command_text,
         chat_id=row.chat_id,
         user_open_id=row.user_open_id,
+        reply_to_message_id=row.reply_to_message_id,
+        reply_in_thread=row.reply_in_thread,
         status=JobStatus(row.status),
         submitted_at=row.submitted_at,
         started_at=row.started_at,
