@@ -15,7 +15,7 @@ from neocortex.agents.quant_fundamental import (
 )
 from neocortex.agents.sector import MetricRow, SectorAgent
 from neocortex.agents.technical import TechnicalAgent
-from neocortex.llm import LLMTransport
+from neocortex.llm.transport import LLMTransport
 
 __all__ = [
     "Agent",

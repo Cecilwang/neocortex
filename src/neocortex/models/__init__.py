@@ -1,6 +1,5 @@
 """Shared domain models for Neocortex."""
 
-from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
 from neocortex.models.agent import (
     AgentExecutionTrace,
     AgentRequest,
@@ -37,10 +36,6 @@ __all__ = [
     "AgentRequest",
     "AgentResponse",
     "AgentRole",
-    "LLMEndpoint",
-    "LLMInferenceConfig",
-    "LLMRequestConfig",
-    "LLMService",
     "CompanyProfile",
     "DataProvider",
     "DisclosureSection",

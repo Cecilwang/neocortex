@@ -7,7 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-from neocortex.llm import LLMInferenceConfig
+from neocortex.llm.config import LLMInferenceConfig
 from neocortex.models.core import SecurityId
 
 

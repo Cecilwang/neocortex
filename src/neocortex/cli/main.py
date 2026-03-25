@@ -7,6 +7,8 @@ import logging
 import sys
 from typing import Sequence
 
+from dotenv import load_dotenv
+
 from neocortex.commands import (
     CommandActor,
     CommandArgumentParser,
@@ -20,7 +22,7 @@ from neocortex.commands import (
     ParsedInvocation,
     build_command_registry,
 )
-from neocortex.config import get_config, load_dotenv, reset_config_cache
+from neocortex.config import get_config, reset_config_cache
 from neocortex.log import configure_logging
 
 from neocortex.cli.render import render_command_result

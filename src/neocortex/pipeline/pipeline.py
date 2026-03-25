@@ -15,7 +15,8 @@ from neocortex.agents.quant_fundamental import QuantFundamentalAgent
 from neocortex.agents.sector import SectorAgent
 from neocortex.agents.technical import TechnicalAgent
 from neocortex.config import get_config
-from neocortex.llm import LLMInferenceConfig, LLMTransport
+from neocortex.llm import LLMInferenceConfig
+from neocortex.llm.transport import LLMTransport
 from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import AgentExecutionTrace, AgentRole, SecurityId
 

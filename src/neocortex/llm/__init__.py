@@ -6,12 +6,10 @@ from neocortex.llm.config import (
     LLMRequestConfig,
     LLMService,
 )
-from neocortex.llm.transport import LLMTransport
 
 __all__ = [
     "LLMEndpoint",
     "LLMInferenceConfig",
-    "LLMTransport",
     "LLMRequestConfig",
     "LLMService",
 ]

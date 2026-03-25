@@ -8,7 +8,8 @@ from datetime import date
 import logging
 from typing import Any, Mapping
 
-from neocortex.llm import LLMInferenceConfig, LLMTransport
+from neocortex.llm import LLMInferenceConfig
+from neocortex.llm.transport import LLMTransport
 from neocortex.market_data_provider import MarketDataProvider
 from neocortex.models import (
     AgentExecutionTrace,

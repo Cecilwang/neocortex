@@ -33,4 +33,7 @@ def parse_json_object(raw_output: str | dict[str, Any]) -> dict[str, Any]:
 
     if isinstance(raw_output, dict):
         return raw_output
-    return json.loads(raw_output)
+    parsed = json.loads(raw_output)
+    if not isinstance(parsed, dict):
+        raise ValueError("Expected one JSON object at top level.")
+    return parsed

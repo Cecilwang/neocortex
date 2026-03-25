@@ -1,7 +1,5 @@
 """Configuration helpers for local runtime setup."""
 
-from dotenv import load_dotenv
-
 from neocortex.config.config import (
     AppConfig,
     MarketDataProviderConfig,
@@ -25,6 +23,5 @@ __all__ = [
     "StorageConfig",
     "default_config_path",
     "get_config",
-    "load_dotenv",
     "reset_config_cache",
 ]

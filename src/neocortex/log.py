@@ -16,4 +16,4 @@ def configure_logging(
     """Configure process-wide logging for command entrypoints."""
 
     resolved_level = getattr(logging, level) if isinstance(level, str) else level
-    logging.basicConfig(level=resolved_level, format=format)
+    logging.basicConfig(level=resolved_level, format=format, force=True)

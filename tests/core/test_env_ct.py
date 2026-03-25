@@ -1,6 +1,8 @@
 import os
 
-from neocortex.config import get_config, load_dotenv, reset_config_cache
+from dotenv import load_dotenv
+
+from neocortex.config import get_config, reset_config_cache
 from neocortex.feishu.settings import FeishuSettings
 from neocortex.models import Market
 
