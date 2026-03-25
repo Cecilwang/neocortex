@@ -82,9 +82,9 @@ class ReadThroughMarketDataProvider(MarketDataProvider):
         return cls(
             store=store,
             source_connectors={
-                "baostock": BaoStockConnector(store=store),
-                "efinance": EFinanceConnector(store=store),
-                "akshare": AkShareConnector(store=store),
+                "baostock": BaoStockConnector(),
+                "efinance": EFinanceConnector(),
+                "akshare": AkShareConnector(),
             },
         )
 

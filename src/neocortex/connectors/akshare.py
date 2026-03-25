@@ -130,9 +130,8 @@ class _AkShareApiClient:
         profile_items = self._profile_items(raw_profile)
         company_name = str(profile_items[_EM_PROFILE_NAME_FIELD]).strip()
         industry = str(profile_items[_EM_PROFILE_INDUSTRY_FIELD]).strip()
-        assert company_name and industry, (
-            "Eastmoney profile is missing required fields."
-        )
+        if not company_name or not industry:
+            raise ValueError("Eastmoney profile is missing required fields.")
         return company_name, industry
 
     @connector_retry(source_name=source_name)
@@ -159,7 +158,8 @@ class _AkShareApiClient:
             industry = str(industry_value["ind_name"])
         else:
             industry = str(industry_value)
-        assert company_name and industry, "Xueqiu profile is missing required fields."
+        if not company_name or not industry:
+            raise ValueError("Xueqiu profile is missing required fields.")
         return company_name, industry
 
     def get_daily_price_bars(
@@ -274,9 +274,8 @@ class AkShareConnector(BaseSourceConnector):
         *,
         timeout: float | None = None,
         api: Any | None = None,
-        store=None,
     ) -> None:
-        super().__init__(store=store)
+        super().__init__()
         self.timeout = timeout
         self.api = api
         self._client = _AkShareApiClient(timeout=timeout, api=api)

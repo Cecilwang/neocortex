@@ -715,7 +715,7 @@ class MacroPointRepository:
             for record in records:
                 statement = sqlite_insert(MacroPointRow).values(
                     source=record.source,
-                    market=record.market,
+                    market=record.market.value,
                     series_key=record.series_key,
                     observed_at=record.observed_at,
                     series_name=record.series_name,
@@ -781,7 +781,7 @@ class MacroPointRepository:
         return tuple(
             MacroPointRecord(
                 source=row.source,
-                market=row.market,
+                market=Market(row.market),
                 series_key=row.series_key,
                 observed_at=row.observed_at,
                 series_name=row.series_name,

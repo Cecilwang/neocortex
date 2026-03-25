@@ -1,4 +1,5 @@
 from datetime import date
+import importlib
 
 import pandas as pd
 import pytest
@@ -179,6 +180,19 @@ class FakeBaoStockAPI:
                 }
             )
         )
+
+
+class MissingProfileBaoStockAPI(FakeBaoStockAPI):
+    def query_stock_basic(self, code: str = "", code_name: str = ""):
+        assert code_name == ""
+        if code == "":
+            return super().query_stock_basic(code=code, code_name=code_name)
+        assert code == "sh.600519"
+        return _Result(pd.DataFrame({"code_name": [""]}))
+
+    def query_stock_industry(self, *, code: str):
+        assert code == "sh.600519"
+        return _Result(pd.DataFrame({"industry": [""]}))
 
 
 class FakeBaoStockAdjustedAPI:
@@ -506,7 +520,7 @@ def test_baostock_connector_fetches_adjusted_daily_price_bars_with_official_fact
     store = MarketDataStore(tmp_path / "market.sqlite3")
     store.ensure_schema()
     api = FakeBaoStockAdjustedAPI()
-    connector = BaoStockConnector(api=api, store=store)
+    connector = BaoStockConnector(api=api)
     security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
     raw_records = (
         DailyPriceBarRecord(
@@ -674,7 +688,7 @@ def test_baostock_connector_fetches_fundamentals_and_macro_points() -> None:
     assert macro_points == (
         MacroPointRecord(
             source="baostock",
-            market="CN",
+            market=Market.CN,
             series_key="cn_money_supply.moneySupplyM2",
             observed_at="2026-03",
             series_name="moneySupplyM2",
@@ -687,7 +701,7 @@ def test_baostock_connector_fetches_fundamentals_and_macro_points() -> None:
         ),
         MacroPointRecord(
             source="baostock",
-            market="CN",
+            market=Market.CN,
             series_key="cn_rrr.largeRRR",
             observed_at="2026-03-15",
             series_name="largeRRR",
@@ -715,3 +729,24 @@ def test_baostock_connector_rejects_disclosure_sections() -> None:
             security_id,
             as_of_date=date(2026, 3, 19),
         )
+
+
+def test_baostock_connector_rejects_incomplete_profile_data() -> None:
+    connector = BaoStockConnector(api=MissingProfileBaoStockAPI())
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    with pytest.raises(ValueError, match="profile is missing required fields"):
+        connector.get_security_profile_snapshot(security_id)
+
+
+def test_baostock_connector_reports_missing_dependency(monkeypatch) -> None:
+    connector = BaoStockConnector()
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    def _raise_missing(name: str):
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(importlib, "import_module", _raise_missing)
+
+    with pytest.raises(RuntimeError, match="optional 'baostock' dependency"):
+        connector.get_security_profile_snapshot(security_id)

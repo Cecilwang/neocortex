@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 from typing import ClassVar
 
-from neocortex.config import get_config
 from neocortex.connectors.types import (
     AdjustmentFactorRecord,
     DailyPriceBarRecord,
@@ -32,12 +31,9 @@ class BaseSourceConnector:
 
     def __init__(
         self,
-        *,
-        store=None,
     ) -> None:
         if not getattr(self, "source_name", "").strip():
             raise ValueError("Source connectors must define a non-empty source_name.")
-        self._market_data_store = store
 
     def supports_market(self, market: Market) -> bool:
         return not self.supported_markets or market in self.supported_markets
@@ -130,13 +126,3 @@ class BaseSourceConnector:
     ) -> tuple[TradingDateRecord, ...]:
         _ = market, start_date, end_date
         raise NotImplementedError
-
-    def _market_store(self):
-        from neocortex.storage.market_store import MarketDataStore
-
-        if self._market_data_store is None:
-            self._market_data_store = MarketDataStore(
-                get_config().storage.market_data_db_path
-            )
-        self._market_data_store.ensure_schema()
-        return self._market_data_store

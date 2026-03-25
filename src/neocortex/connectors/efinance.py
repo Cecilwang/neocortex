@@ -37,7 +37,12 @@ class _EFinanceApiClient:
     def _api(self) -> Any:
         if self.api is not None:
             return self.api
-        return importlib.import_module("efinance")
+        try:
+            return importlib.import_module("efinance")
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "EFinanceConnector requires the optional 'efinance' dependency."
+            ) from exc
 
     @connector_retry(source_name=source_name)
     def list_securities(self, *, market: Market) -> tuple[SecurityListing, ...]:
@@ -79,9 +84,8 @@ class _EFinanceApiClient:
             series = raw
         company_name = _series_value(series, "股票名称")
         industry = _series_value(series, "所处行业")
-        assert company_name and industry, (
-            f"Incomplete profile data for {security_id}: {raw}"
-        )
+        if not company_name or not industry:
+            raise ValueError(f"Incomplete profile data for {security_id}: {raw}")
         return SecurityProfileSnapshot(
             source=self.source_name,
             security_id=security_id,
@@ -192,11 +196,10 @@ class EFinanceConnector(BaseSourceConnector):
 
     def __init__(
         self,
-        api: Any | None = None,
         *,
-        store=None,
+        api: Any | None = None,
     ) -> None:
-        super().__init__(store=store)
+        super().__init__()
         self.api = api
         self._client = _EFinanceApiClient(api=api)
 

@@ -485,7 +485,7 @@ def test_read_through_provider_returns_other_runtime_resources(
         macro_records=(
             MacroPointRecord(
                 source="baostock",
-                market="CN",
+                market=Market.CN,
                 series_key="cn_rrr.latest",
                 observed_at="2026-03-01",
                 series_name="CN RRR",

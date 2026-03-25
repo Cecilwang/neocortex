@@ -104,7 +104,7 @@ class MacroPointRecord:
     """One source-specific macro or market time-series point."""
 
     source: str
-    market: str
+    market: Market
     series_key: str
     observed_at: str
     series_name: str

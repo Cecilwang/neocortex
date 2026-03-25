@@ -1,6 +1,8 @@
 from datetime import date
+import importlib
 
 import pandas as pd
+import pytest
 
 from neocortex.connectors import EFinanceConnector
 from neocortex.connectors.types import (
@@ -65,6 +67,17 @@ class FakeEFinanceStockAPI:
 
 class FakeEFinanceAPI:
     stock = FakeEFinanceStockAPI()
+
+
+class IncompleteProfileEFinanceStockAPI(FakeEFinanceStockAPI):
+    @staticmethod
+    def get_base_info(symbol: str) -> pd.DataFrame:
+        assert symbol == "600519"
+        return pd.DataFrame([{"股票名称": "贵州茅台", "所处行业": ""}])
+
+
+class IncompleteProfileEFinanceAPI:
+    stock = IncompleteProfileEFinanceStockAPI()
 
 
 def test_efinance_connector_lists_cn_securities() -> None:
@@ -185,3 +198,24 @@ def test_efinance_connector_fetches_adjusted_daily_price_bars() -> None:
             amount=119900.0,
         ),
     )
+
+
+def test_efinance_connector_rejects_incomplete_profile_data() -> None:
+    connector = EFinanceConnector(api=IncompleteProfileEFinanceAPI())
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    with pytest.raises(ValueError, match="Incomplete profile data"):
+        connector.get_security_profile_snapshot(security_id)
+
+
+def test_efinance_connector_reports_missing_dependency(monkeypatch) -> None:
+    connector = EFinanceConnector()
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    def _raise_missing(name: str):
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(importlib, "import_module", _raise_missing)
+
+    with pytest.raises(RuntimeError, match="optional 'efinance' dependency"):
+        connector.get_security_profile_snapshot(security_id)

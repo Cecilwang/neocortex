@@ -82,7 +82,12 @@ class _BaoStockApiClient:
     def _api(self) -> Any:
         if self.api is not None:
             return self.api
-        return importlib.import_module("baostock")
+        try:
+            return importlib.import_module("baostock")
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "BaoStockConnector requires the optional 'baostock' dependency."
+            ) from exc
 
     def _result_to_frame(self, result: Any) -> pd.DataFrame:
         if getattr(result, "error_code", "0") != "0":
@@ -144,9 +149,8 @@ class _BaoStockApiClient:
         industry_name = None
         if not industry.empty:
             industry_name = str(industry.iloc[0].get("industry", "")).strip() or None
-        assert company_name and industry_name, (
-            "BaoStock profile is missing required fields."
-        )
+        if not company_name or not industry_name:
+            raise ValueError("BaoStock profile is missing required fields.")
         return SecurityProfileSnapshot(
             source="baostock",
             security_id=security_id,
@@ -278,9 +282,10 @@ class _BaoStockApiClient:
             trade_date = str(
                 row.get("dividOperateDate") or row.get("adjustDate") or row.get("date")
             )
-            assert trade_date, (
-                "BaoStock adjustment factor record is missing trade date."
-            )
+            if not trade_date:
+                raise ValueError(
+                    "BaoStock adjustment factor record is missing trade date."
+                )
             qfq = row.get("foreAdjustFactor")
             hfq = row.get("backAdjustFactor")
             if qfq is not None and qfq != "":
@@ -394,7 +399,7 @@ class _BaoStockApiClient:
                 records.append(
                     MacroPointRecord(
                         source="baostock",
-                        market=market.value,
+                        market=market,
                         series_key=f"{series_prefix}.{column}",
                         observed_at=observed_at,
                         series_name=column,
@@ -452,11 +457,10 @@ class BaoStockConnector(BaseSourceConnector):
 
     def __init__(
         self,
-        api: Any | None = None,
         *,
-        store=None,
+        api: Any | None = None,
     ) -> None:
-        super().__init__(store=store)
+        super().__init__()
         self._client = _BaoStockApiClient(api)
 
     def list_securities(self, *, market: Market) -> tuple[SecurityListing, ...]:

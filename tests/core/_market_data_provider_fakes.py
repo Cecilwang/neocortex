@@ -142,7 +142,7 @@ class FakeSourceConnector(BaseSourceConnector):
         supports_adjustment_factors: bool = True,
         supports_adjusted_daily_bars: bool = True,
     ) -> None:
-        super().__init__(store=store)
+        super().__init__()
         self.store = store
         self.profile = profile
         self.daily_records = daily_records
