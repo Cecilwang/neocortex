@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class FeishuBotStore:
-    """Persist processed event receipts and async job state."""
+    """Persist processed event receipts and async job inspection state."""
 
     def __init__(self, db_path: str | Path) -> None:
         self.engine = create_sqlite_engine(db_path)

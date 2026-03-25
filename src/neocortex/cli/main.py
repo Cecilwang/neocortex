@@ -98,4 +98,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if exc.help_text:
             print(exc.help_text, file=sys.stderr, end="")
         return exc.status
-    return _dispatch_cli_command(args)
+    try:
+        return _dispatch_cli_command(args)
+    except CommandUsageError as exc:
+        print(exc.message, file=sys.stderr)
+        if exc.help_text:
+            print(exc.help_text, file=sys.stderr, end="")
+        return exc.status

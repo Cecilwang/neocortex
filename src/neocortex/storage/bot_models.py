@@ -22,7 +22,7 @@ class FeishuEventReceiptRow(BotBase):
 
 
 class FeishuJobRow(BotBase):
-    """Async bot jobs persisted so operators can inspect state."""
+    """Async bot job records persisted for status inspection."""
 
     __tablename__ = "feishu_jobs"
     __table_args__ = (Index("idx_feishu_jobs_status", "status"),)

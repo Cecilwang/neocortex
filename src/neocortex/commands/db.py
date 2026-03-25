@@ -8,6 +8,7 @@ import logging
 from neocortex.commands.core import (
     AuthPolicy,
     CommandContext,
+    CommandUsageError,
     CommandResult,
     CommandSpec,
     ExecutionMode,
@@ -36,12 +37,11 @@ def build_db_query_command_spec(*, default_db_path: str) -> CommandSpec:
 
     def handler(args: argparse.Namespace, context: CommandContext) -> CommandResult:
         _ = context
-        query = build_query(sql=args.sql, table=args.table, limit=args.limit)
-        logger.info(
-            "Running DB query command: "
-            f"query_source={'sql' if args.sql is not None else 'table'} format={args.format}"
-        )
-        columns, rows = execute_query(args.db_path, query)
+        try:
+            query = build_query(sql=args.sql, table=args.table, limit=args.limit)
+            columns, rows = execute_query(args.db_path, query)
+        except ValueError as exc:
+            raise CommandUsageError(str(exc)) from exc
         payload = {
             "columns": columns,
             "rows": rows,

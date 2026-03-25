@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from neocortex.commands import CommandResult
 from neocortex.serialization import to_pretty_json
-from neocortex.storage.query import render_table
+from neocortex.tabular import render_table
 
 
 def render_command_result(result: CommandResult) -> int:

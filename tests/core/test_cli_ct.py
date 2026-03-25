@@ -1129,6 +1129,30 @@ def test_cli_db_query_renders_table(tmp_path, capsys) -> None:
     assert "中芯国际" in output
 
 
+def test_cli_db_query_rejects_write_sql(tmp_path, capsys) -> None:
+    from neocortex import cli
+
+    db_path = tmp_path / "query.sqlite"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("create table sample_rows (name text)")
+        connection.execute("insert into sample_rows (name) values ('alpha')")
+        connection.commit()
+
+    exit_code = cli.main(
+        [
+            "db",
+            "query",
+            "--db-path",
+            str(db_path),
+            "--sql",
+            "DELETE FROM sample_rows",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Only read-only SELECT queries are allowed." in capsys.readouterr().err
+
+
 def test_cli_market_data_provider_profile_uses_read_through_provider(
     monkeypatch,
     capsys,

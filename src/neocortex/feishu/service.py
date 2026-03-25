@@ -29,7 +29,7 @@ from neocortex.feishu.models import BotRequest, FeishuMessageEvent
 from neocortex.feishu.settings import FeishuSettings
 from neocortex.feishu.storage import FeishuBotStore
 from neocortex.serialization import to_pretty_json
-from neocortex.storage.query import render_table
+from neocortex.tabular import render_table
 
 
 logger = logging.getLogger(__name__)
