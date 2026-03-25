@@ -23,7 +23,7 @@ class FeishuMessageEvent:
     message_id: str
     chat_id: str
     chat_type: str
-    sender_open_id: str
+    sender_id: str
     text: str
 
 

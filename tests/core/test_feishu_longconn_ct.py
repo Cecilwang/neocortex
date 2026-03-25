@@ -7,9 +7,13 @@ from neocortex.feishu.settings import FeishuSettings
 class FakeService:
     def __init__(self) -> None:
         self.payloads: list[dict[str, object]] = []
+        self.closed = False
 
     def handle_event_payload(self, payload: dict[str, object]) -> None:
         self.payloads.append(payload)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeWSClient:
@@ -96,3 +100,18 @@ def test_long_connection_runner_starts_sdk_client(tmp_path) -> None:
     assert FakeWSClient.last_init["app_id"] == "cli_app"
     assert FakeWSClient.last_init["app_secret"] == "cli_secret"
     assert FakeWSClient.last_init["domain"] == "https://open.feishu.cn"
+
+
+def test_long_connection_runner_close_closes_owned_service(tmp_path) -> None:
+    settings = FeishuSettings(
+        app_id="cli_app",
+        app_secret="cli_secret",
+        db_path=tmp_path / "bot.sqlite3",
+    )
+    service = FakeService()
+    runner = FeishuLongConnectionRunner(settings, service=service)
+    runner._owns_service = True
+
+    runner.close()
+
+    assert service.closed is True

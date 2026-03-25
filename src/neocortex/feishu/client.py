@@ -29,6 +29,7 @@ class FeishuClient:
         self.http_client = http_client or httpx.Client(
             base_url=settings.base_url, timeout=10.0
         )
+        self._owns_http_client = http_client is None
         self._tenant_access_token: str | None = None
         self._token_deadline: float = 0.0
         logger.info(f"Initialized FeishuClient: base_url={settings.base_url}")
@@ -102,3 +103,8 @@ class FeishuClient:
         self._token_deadline = now + max(expire - _TOKEN_REFRESH_BUFFER_SECONDS, 1)
         logger.info(f"Refreshed Feishu tenant access token: expires_in={expire}")
         return token
+
+    def close(self) -> None:
+        if self._owns_http_client:
+            logger.info("Closing Feishu HTTP client.")
+            self.http_client.close()

@@ -19,14 +19,30 @@ from neocortex.feishu.storage import FeishuBotStore
 class FakeClient:
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
+        self.closed = False
 
     def send_text(self, *, chat_id: str, text: str) -> None:
         self.messages.append((chat_id, text))
+
+    def close(self) -> None:
+        self.closed = True
 
 class ImmediateExecutor:
     def submit(self, fn, *args, **kwargs) -> None:
         fn(*args, **kwargs)
         return None
+
+
+class FakeExecutor:
+    def __init__(self) -> None:
+        self.shutdown_called = False
+
+    def submit(self, fn, *args, **kwargs) -> None:
+        fn(*args, **kwargs)
+        return None
+
+    def shutdown(self, *, wait: bool) -> None:
+        self.shutdown_called = True
 
 
 def _build_async_cli_registry() -> CommandRegistry:
@@ -254,6 +270,24 @@ def test_cli_route_reports_usage_error(tmp_path) -> None:
     assert "db query" in client.messages[0][1]
 
 
+def test_cli_route_reports_handler_stage_usage_error(tmp_path) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+    db_path = tmp_path / "market.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("create table sample_rows (name text)")
+        connection.commit()
+
+    service.handle_event_payload(
+        _activated_group_message_event(
+            text=f"cli db query --db-path {db_path} --sql \"DELETE FROM sample_rows\""
+        )
+    )
+
+    assert len(client.messages) == 1
+    assert "Only read-only SELECT queries are allowed." in client.messages[0][1]
+
+
 def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> None:
     from neocortex.feishu import service as feishu_service
 
@@ -343,6 +377,35 @@ def test_job_route_is_handled_directly_by_service(tmp_path, monkeypatch) -> None
     assert len(client.messages) == 1
     assert "job_id=1" in client.messages[0][1]
     assert "command=demo async" in client.messages[0][1]
+
+
+def test_normalizer_rejects_message_without_sender_open_id(tmp_path) -> None:
+    client = FakeClient()
+    service = FeishuBotService(_settings(tmp_path), client=client)
+    payload = _message_event(text="help")
+    payload["event"]["sender"]["sender_id"] = {"user_id": "u_user"}  # type: ignore[index]
+
+    service.handle_event_payload(payload)
+
+    assert client.messages == []
+
+
+def test_service_close_closes_owned_resources(tmp_path) -> None:
+    client = FakeClient()
+    executor = FakeExecutor()
+    service = FeishuBotService(
+        _settings(tmp_path),
+        client=client,
+        executor=executor,
+    )
+    service._owns_client = True
+    service._owns_executor = True
+    client.closed = False
+
+    service.close()
+
+    assert client.closed is True
+    assert executor.shutdown_called is True
 
 
 def test_job_route_reports_usage_for_invalid_job_id(tmp_path) -> None:

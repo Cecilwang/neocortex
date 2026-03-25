@@ -26,6 +26,7 @@ class FeishuLongConnectionRunner:
     ) -> None:
         self.settings = settings
         self.service = service or FeishuBotService(settings)
+        self._owns_service = service is None
         self.ws_client_factory = ws_client_factory
 
     def start(self) -> None:
@@ -44,6 +45,11 @@ class FeishuLongConnectionRunner:
         )
         logger.info("Feishu long connection client initialized; waiting for events.")
         client.start()
+
+    def close(self) -> None:
+        if self._owns_service:
+            logger.info("Closing Feishu long connection runner-owned service.")
+            self.service.close()
 
     def _build_event_handler(self) -> lark.EventDispatcherHandler:
         logger.info("Building Feishu long-connection event handler.")

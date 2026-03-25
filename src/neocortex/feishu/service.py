@@ -78,16 +78,17 @@ class FeishuMessageNormalizer:
         message_id = str(message.get("message_id") or "")
         chat_id = str(message.get("chat_id") or "")
         chat_type = str(message.get("chat_type") or "")
-        sender_open_id = str(sender_id.get("open_id") or sender_id.get("user_id") or "")
+        sender_id_value = sender_id.get("open_id")
+        sender_id_text = str(sender_id_value or "")
         raw_text = _extract_text_content(message.get("content"))
-        if not all((event_id, message_id, chat_id, sender_open_id)):
+        if not all((event_id, message_id, chat_id, sender_id_text)):
             return None
         return FeishuMessageEvent(
             event_id=event_id,
             message_id=message_id,
             chat_id=chat_id,
             chat_type=chat_type,
-            sender_open_id=sender_open_id,
+            sender_id=sender_id_text,
             text=raw_text,
         )
 
@@ -119,7 +120,7 @@ class FeishuBotRouter:
             command_text = _strip_leading_placeholder_mentions(raw_text)
             logger.info(
                 f"Feishu p2p activation accepted: event_id={event.event_id} "
-                f"sender={event.sender_open_id}"
+                f"sender={event.sender_id}"
             )
             return command_text.strip()
 
@@ -128,12 +129,12 @@ class FeishuBotRouter:
             if self.settings.bot_open_id and self.settings.bot_open_id in leading_tags.targets:
                 logger.info(
                     f"Feishu group activation matched bot_open_id: event_id={event.event_id} "
-                    f"sender={event.sender_open_id}"
+                    f"sender={event.sender_id}"
                 )
                 return _strip_leading_placeholder_mentions(leading_tags.remainder).strip()
             logger.info(
                 f"Feishu group activation ignored unmatched at-tag: event_id={event.event_id} "
-                f"sender={event.sender_open_id}"
+                f"sender={event.sender_id}"
             )
             return None
 
@@ -141,13 +142,13 @@ class FeishuBotRouter:
         if stripped != raw_text:
             logger.warning(
                 f"Feishu group message had placeholder mention without at-tag: event_id={event.event_id} "
-                f"sender={event.sender_open_id}"
+                f"sender={event.sender_id}"
             )
             return None
 
         logger.info(
             f"Ignoring non-activated group message: event_id={event.event_id} "
-            f"sender={event.sender_open_id}"
+            f"sender={event.sender_id}"
         )
         return None
 
@@ -167,6 +168,8 @@ class FeishuBotService:
         self.store = store or FeishuBotStore(settings.db_path)
         self.client = client or FeishuClient(settings)
         self.executor = executor or ThreadPoolExecutor(max_workers=settings.job_workers)
+        self._owns_client = client is None
+        self._owns_executor = executor is None
         self.normalizer = FeishuMessageNormalizer()
         self.router = FeishuBotRouter(settings)
         logger.info(
@@ -184,7 +187,7 @@ class FeishuBotService:
 
         logger.info(
             f"Received Feishu message: event_id={event.event_id} chat_id={event.chat_id} "
-            f"chat_type={event.chat_type} sender={event.sender_open_id}"
+            f"chat_type={event.chat_type} sender={event.sender_id}"
         )
         if not self.store.record_event(
             event_id=event.event_id, message_id=event.message_id
@@ -211,13 +214,13 @@ class FeishuBotService:
             return
         logger.warning(
             f"Invalid Feishu command: event_id={event.event_id} "
-            f"chat_type={event.chat_type} sender={event.sender_open_id}"
+            f"chat_type={event.chat_type} sender={event.sender_id}"
         )
         self._send_reply(event.chat_id, f"Invalid command.\n\n{HELP_TEXT}")
 
     def _handle_cli_request(self, event: FeishuMessageEvent, request: BotRequest) -> None:
         logger.info(
-            f"Handling Feishu cli request: event_id={event.event_id} sender={event.sender_open_id}"
+            f"Handling Feishu cli request: event_id={event.event_id} sender={event.sender_id}"
         )
         try:
             invocation = _parse_cli_invocation(_cli_tokens(request))
@@ -237,7 +240,7 @@ class FeishuBotService:
         if invocation.spec.exposure is Exposure.CLI_ONLY:
             logger.warning(
                 f"Rejected cli-only Feishu command: path={invocation.spec.path} "
-                f"sender={event.sender_open_id}"
+                f"sender={event.sender_id}"
             )
             self._send_reply(
                 event.chat_id,
@@ -253,7 +256,7 @@ class FeishuBotService:
                 command_name=invocation.spec.path,
                 command_text=request.text,
                 chat_id=event.chat_id,
-                user_open_id=event.sender_open_id,
+                user_open_id=event.sender_id,
             )
             logger.info(
                 f"Queued Feishu cli async job_id={job.id} command={invocation.spec.path}"
@@ -272,10 +275,10 @@ class FeishuBotService:
         return CommandContext(
             actor=CommandActor(
                 source=InvocationSource.FEISHU,
-                user_id=event.sender_open_id,
+                user_id=event.sender_id,
                 chat_id=event.chat_id,
                 chat_type=event.chat_type,
-                is_admin=event.sender_open_id in self.settings.admin_open_ids,
+                is_admin=event.sender_id in self.settings.admin_open_ids,
             ),
             services=CommandServices(),
             request_id=event.event_id,
@@ -342,6 +345,13 @@ class FeishuBotService:
     ) -> _CliExecutionOutcome:
         try:
             result = dispatcher.dispatch(invocation, context)
+        except CommandHelpRequested as exc:
+            return _CliExecutionOutcome(ok=False, text=exc.help_text)
+        except CommandUsageError as exc:
+            text = exc.message
+            if exc.help_text:
+                text = f"{text}\n\n{exc.help_text}"
+            return _CliExecutionOutcome(ok=False, text=text)
         except PermissionError:
             return _CliExecutionOutcome(
                 ok=False,
@@ -357,6 +367,14 @@ class FeishuBotService:
             ok=True,
             text=_render_command_result_for_chat(result),
         )
+
+    def close(self) -> None:
+        if self._owns_executor:
+            logger.info("Shutting down Feishu bot executor.")
+            self.executor.shutdown(wait=False)
+        if self._owns_client and hasattr(self.client, "close"):
+            logger.info("Closing Feishu bot client.")
+            self.client.close()
 
 def _extract_text_content(raw_content: object) -> str:
     if isinstance(raw_content, str):
