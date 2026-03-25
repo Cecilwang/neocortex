@@ -72,4 +72,6 @@ class SMA(Indicator):
     @property
     def sma(self) -> pd.Series:
         return self.data["value"]
+
+
 sma = SMAIndicator()

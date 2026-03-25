@@ -4,16 +4,11 @@ import argparse
 from neocortex.commands import (
     AuthPolicy,
     CommandRegistry,
-    CommandResult,
     CommandSpec,
     ExecutionMode,
     Exposure,
 )
-
-
-def _demo_handler(args: argparse.Namespace, context) -> CommandResult:
-    _ = context
-    return CommandResult.text(f"registry:{args.target}")
+from tests.core.command_test_support import simple_target_handler
 
 
 def test_cli_dispatches_registry_managed_root(monkeypatch, capsys) -> None:
@@ -30,7 +25,7 @@ def test_cli_dispatches_registry_managed_root(monkeypatch, capsys) -> None:
             auth=AuthPolicy.PUBLIC,
             execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
-            handler=_demo_handler,
+            handler=simple_target_handler,
         )
     )
     captured: dict[str, object] = {}
@@ -65,7 +60,7 @@ def test_cli_registry_help_returns_zero(monkeypatch, capsys) -> None:
             auth=AuthPolicy.PUBLIC,
             execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
-            handler=_demo_handler,
+            handler=simple_target_handler,
         )
     )
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
@@ -96,7 +91,7 @@ def test_cli_fully_managed_root_help_uses_registry(monkeypatch, capsys) -> None:
             auth=AuthPolicy.PUBLIC,
             execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
-            handler=_demo_handler,
+            handler=simple_target_handler,
         )
     )
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
@@ -134,7 +129,7 @@ def test_cli_registry_usage_error_returns_two(monkeypatch, capsys) -> None:
             auth=AuthPolicy.PUBLIC,
             execution_mode=ExecutionMode.SYNC,
             configure_parser=configure_parser,
-            handler=_demo_handler,
+            handler=simple_target_handler,
         )
     )
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)
@@ -167,7 +162,7 @@ def test_cli_unknown_subcommand_returns_registry_usage_error(
             auth=AuthPolicy.PUBLIC,
             execution_mode=ExecutionMode.SYNC,
             configure_parser=lambda parser: parser.add_argument("target"),
-            handler=_demo_handler,
+            handler=simple_target_handler,
         )
     )
     monkeypatch.setattr(parser_cli, "build_command_registry", lambda: registry)

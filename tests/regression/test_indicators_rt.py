@@ -1,3 +1,10 @@
+"""Deterministic indicator output baselines.
+
+These are regression-style golden outputs for known input series. They are kept
+under regression/ to make the pinned numeric baselines easy to locate alongside
+other snapshot-style expectations.
+"""
+
 from dataclasses import asdict
 from datetime import datetime
 

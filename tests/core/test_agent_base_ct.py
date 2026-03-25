@@ -4,7 +4,13 @@ import pytest
 
 from neocortex.agents.base import Agent
 from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
-from neocortex.models import AgentRole, Exchange, Market, SecurityId, ResponseValidationStatus
+from neocortex.models import (
+    AgentRole,
+    Exchange,
+    Market,
+    SecurityId,
+    ResponseValidationStatus,
+)
 
 
 class _DummyTransport:

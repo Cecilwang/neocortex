@@ -101,4 +101,6 @@ def calculate_ema_series(values: pd.Series, window: int) -> pd.Series:
         ema = (alpha * float(value)) + ((1 - alpha) * ema)
         ema_values.append(ema)
     return pd.Series(ema_values, dtype=object)
+
+
 ema = EMAIndicator()

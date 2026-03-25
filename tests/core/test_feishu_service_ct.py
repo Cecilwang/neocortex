@@ -14,35 +14,7 @@ from neocortex.commands import (
 from neocortex.feishu.service import FeishuBotService
 from neocortex.feishu.settings import FeishuSettings
 from neocortex.feishu.storage import FeishuBotStore
-
-
-class FakeClient:
-    def __init__(self) -> None:
-        self.messages: list[tuple[str, str]] = []
-        self.closed = False
-
-    def send_text(self, *, chat_id: str, text: str) -> None:
-        self.messages.append((chat_id, text))
-
-    def close(self) -> None:
-        self.closed = True
-
-class ImmediateExecutor:
-    def submit(self, fn, *args, **kwargs) -> None:
-        fn(*args, **kwargs)
-        return None
-
-
-class FakeExecutor:
-    def __init__(self) -> None:
-        self.shutdown_called = False
-
-    def submit(self, fn, *args, **kwargs) -> None:
-        fn(*args, **kwargs)
-        return None
-
-    def shutdown(self, *, wait: bool) -> None:
-        self.shutdown_called = True
+from tests.core.feishu_test_support import FakeClient, FakeExecutor, ImmediateExecutor
 
 
 def _build_async_cli_registry() -> CommandRegistry:
@@ -198,9 +170,7 @@ def test_group_at_tag_matching_bot_open_id_activates_command(tmp_path) -> None:
     client = FakeClient()
     service = FeishuBotService(_settings(tmp_path), client=client)
 
-    service.handle_event_payload(
-        _message_event(text='<at user_id="ou_bot"></at> help')
-    )
+    service.handle_event_payload(_message_event(text='<at user_id="ou_bot"></at> help'))
 
     assert len(client.messages) == 1
     assert "Available commands:" in client.messages[0][1]
@@ -252,7 +222,9 @@ def test_cli_route_rejects_cli_only_command(tmp_path) -> None:
     client = FakeClient()
     service = FeishuBotService(_settings(tmp_path), client=client)
 
-    service.handle_event_payload(_activated_group_message_event(text="cli feishu longconn"))
+    service.handle_event_payload(
+        _activated_group_message_event(text="cli feishu longconn")
+    )
 
     assert client.messages == [
         ("oc_test_chat", "feishu longconn is only available from the CLI.")
@@ -280,7 +252,7 @@ def test_cli_route_reports_handler_stage_usage_error(tmp_path) -> None:
 
     service.handle_event_payload(
         _activated_group_message_event(
-            text=f"cli db query --db-path {db_path} --sql \"DELETE FROM sample_rows\""
+            text=f'cli db query --db-path {db_path} --sql "DELETE FROM sample_rows"'
         )
     )
 
@@ -322,7 +294,9 @@ def test_cli_async_route_persists_job_and_notifies(tmp_path, monkeypatch) -> Non
     )
 
 
-def test_cli_execution_policy_switches_between_sync_and_async(tmp_path, monkeypatch) -> None:
+def test_cli_execution_policy_switches_between_sync_and_async(
+    tmp_path, monkeypatch
+) -> None:
     from neocortex.feishu import service as feishu_service
 
     client = FakeClient()
@@ -339,9 +313,7 @@ def test_cli_execution_policy_switches_between_sync_and_async(tmp_path, monkeypa
         _build_policy_cli_registry,
     )
 
-    service.handle_event_payload(
-        _activated_group_message_event(text="cli demo policy")
-    )
+    service.handle_event_payload(_activated_group_message_event(text="cli demo policy"))
     service.handle_event_payload(
         _activated_group_message_event(
             text="cli demo policy --all",

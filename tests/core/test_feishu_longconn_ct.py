@@ -2,18 +2,7 @@ from types import SimpleNamespace
 
 from neocortex.feishu.longconn import FeishuLongConnectionRunner
 from neocortex.feishu.settings import FeishuSettings
-
-
-class FakeService:
-    def __init__(self) -> None:
-        self.payloads: list[dict[str, object]] = []
-        self.closed = False
-
-    def handle_event_payload(self, payload: dict[str, object]) -> None:
-        self.payloads.append(payload)
-
-    def close(self) -> None:
-        self.closed = True
+from tests.core.feishu_test_support import FakeService
 
 
 class FakeWSClient:

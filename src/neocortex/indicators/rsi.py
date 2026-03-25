@@ -119,4 +119,6 @@ class RSI(Indicator):
     @property
     def rsi(self) -> pd.Series:
         return self.data["value"]
+
+
 rsi = RSIIndicator()

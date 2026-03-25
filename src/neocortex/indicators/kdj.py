@@ -132,4 +132,6 @@ class KDJ(Indicator):
     @property
     def j(self) -> pd.Series:
         return self.data["j"]
+
+
 kdj = KDJIndicator()

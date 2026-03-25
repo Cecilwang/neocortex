@@ -1,3 +1,10 @@
+"""Deterministic model and protocol baselines.
+
+These cases live under regression/ because they pin normalized output shapes and
+derived convenience behavior as snapshot-style baselines, even though they do
+not talk to live upstream systems.
+"""
+
 from datetime import date, datetime
 
 import pytest

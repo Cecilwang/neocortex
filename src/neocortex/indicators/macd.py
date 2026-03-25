@@ -161,4 +161,6 @@ class MACD(Indicator):
     @property
     def hist(self) -> pd.Series:
         return self.data["hist"]
+
+
 macd = MACDIndicator()

@@ -76,4 +76,6 @@ class ROC(Indicator):
     @property
     def roc(self) -> pd.Series:
         return self.data["value"]
+
+
 roc = ROCIndicator()

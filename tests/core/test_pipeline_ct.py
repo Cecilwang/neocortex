@@ -190,10 +190,7 @@ def test_pipeline_stops_when_dependency_trace_failed(monkeypatch) -> None:
 
     def fake_load_pipeline_document(self):
         _ = self
-        return {
-            role.value: {"template": f"{role.value}.yaml"}
-            for role in AgentRole
-        }
+        return {role.value: {"template": f"{role.value}.yaml"} for role in AgentRole}
 
     class FailingTechnicalAgent(_recording_agent_class(AgentRole.TECHNICAL)):
         def run(

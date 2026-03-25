@@ -152,8 +152,10 @@ class FeishuBotStore:
             raise ValueError("--older-than-days must be a positive integer.")
 
         cutoff = (
-            datetime.now(UTC).replace(microsecond=0) - timedelta(days=older_than_days)
-        ).isoformat().replace("+00:00", "Z")
+            (datetime.now(UTC).replace(microsecond=0) - timedelta(days=older_than_days))
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
         logger.info(
             "Cleaning Feishu bot storage: "
             f"older_than_days={older_than_days} cutoff={cutoff}"

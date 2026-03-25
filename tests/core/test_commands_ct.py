@@ -5,7 +5,6 @@ import pytest
 from neocortex.commands import (
     AuthPolicy,
     CommandActor,
-    CommandArgumentParser,
     CommandHelpRequested,
     CommandContext,
     CommandDispatcher,
@@ -18,72 +17,11 @@ from neocortex.commands import (
     InvocationSource,
     ParsedInvocation,
 )
-
-
-def _demo_handler(args: argparse.Namespace, context: CommandContext) -> CommandResult:
-    return CommandResult.text(
-        f"{context.actor.source.value}:{args.target}:{args.count}:{args.verbose}:{len(args.labels)}"
-    )
-
-
-def _demo_spec(
-    *,
-    auth: AuthPolicy = AuthPolicy.PUBLIC,
-    execution_mode: ExecutionMode = ExecutionMode.SYNC,
-    require_target_source: bool = False,
-) -> CommandSpec:
-    def configure_parser(parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("target")
-        parser.add_argument(
-            "--count", type=int, default=1, help="How many times to run."
-        )
-        parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Enable verbose output.",
-        )
-        parser.add_argument(
-            "--label",
-            dest="labels",
-            action="append",
-            default=[],
-            help="Repeatable labels.",
-        )
-        if require_target_source:
-            source_group = parser.add_mutually_exclusive_group(required=True)
-            source_group.add_argument("--symbol", default=None)
-            source_group.add_argument("--name", default=None)
-
-    return CommandSpec(
-        id=("demo", "run"),
-        summary="Run a demo command.",
-        description="Run a demo command with typed arguments.",
-        exposure=Exposure.SHARED,
-        auth=auth,
-        execution_mode=execution_mode,
-        configure_parser=configure_parser,
-        handler=_demo_handler,
-    )
-
-
-def _inspect_spec(
-    command_id: tuple[str, ...],
-    *,
-    description: str,
-) -> CommandSpec:
-    def configure_parser(parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("target")
-
-    return CommandSpec(
-        id=command_id,
-        summary=f"Summary for {' '.join(command_id)}",
-        description=description,
-        exposure=Exposure.SHARED,
-        auth=AuthPolicy.PUBLIC,
-        execution_mode=ExecutionMode.SYNC,
-        configure_parser=configure_parser,
-        handler=_demo_handler,
-    )
+from tests.core.command_test_support import (
+    build_registry_parser as _build_registry_parser,
+    demo_spec as _demo_spec,
+    inspect_spec as _inspect_spec,
+)
 
 
 def _get_named_subparser(
@@ -94,13 +32,6 @@ def _get_named_subparser(
             continue
         return action.choices[name]
     raise AssertionError(f"Subparser {name!r} not found")
-
-
-def _build_registry_parser(registry: CommandRegistry) -> CommandArgumentParser:
-    parser = CommandArgumentParser(prog="neocortex")
-    subcommands = parser.add_subparsers(dest="_command_root", required=True)
-    registry.bind_subcommands(subcommands)
-    return parser
 
 
 def _parse_invocation(

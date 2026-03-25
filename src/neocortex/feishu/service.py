@@ -126,12 +126,17 @@ class FeishuBotRouter:
 
         leading_tags = _consume_leading_at_tags(raw_text)
         if leading_tags is not None:
-            if self.settings.bot_open_id and self.settings.bot_open_id in leading_tags.targets:
+            if (
+                self.settings.bot_open_id
+                and self.settings.bot_open_id in leading_tags.targets
+            ):
                 logger.info(
                     f"Feishu group activation matched bot_open_id: event_id={event.event_id} "
                     f"sender={event.sender_id}"
                 )
-                return _strip_leading_placeholder_mentions(leading_tags.remainder).strip()
+                return _strip_leading_placeholder_mentions(
+                    leading_tags.remainder
+                ).strip()
             logger.info(
                 f"Feishu group activation ignored unmatched at-tag: event_id={event.event_id} "
                 f"sender={event.sender_id}"
@@ -218,7 +223,9 @@ class FeishuBotService:
         )
         self._send_reply(event.chat_id, f"Invalid command.\n\n{HELP_TEXT}")
 
-    def _handle_cli_request(self, event: FeishuMessageEvent, request: BotRequest) -> None:
+    def _handle_cli_request(
+        self, event: FeishuMessageEvent, request: BotRequest
+    ) -> None:
         logger.info(
             f"Handling Feishu cli request: event_id={event.event_id} sender={event.sender_id}"
         )
@@ -268,7 +275,9 @@ class FeishuBotService:
             self.executor.submit(self._run_cli_job, job.id, invocation, context)
             return
 
-        outcome = self._execute_cli_invocation(invocation, context, dispatcher=dispatcher)
+        outcome = self._execute_cli_invocation(
+            invocation, context, dispatcher=dispatcher
+        )
         self._send_reply(event.chat_id, outcome.text)
 
     def _build_command_context(self, event: FeishuMessageEvent) -> CommandContext:
@@ -291,12 +300,16 @@ class FeishuBotService:
         context: CommandContext,
     ) -> None:
         self.store.mark_job_running(job_id)
-        logger.info(f"Running Feishu cli job_id={job_id} command={invocation.spec.path}")
+        logger.info(
+            f"Running Feishu cli job_id={job_id} command={invocation.spec.path}"
+        )
         job = self.store.get_job(job_id)
         if job is None:
             return
         dispatcher = CommandDispatcher()
-        outcome = self._execute_cli_invocation(invocation, context, dispatcher=dispatcher)
+        outcome = self._execute_cli_invocation(
+            invocation, context, dispatcher=dispatcher
+        )
         if not outcome.ok:
             self.store.mark_job_failed(job_id, error_text=outcome.text)
             logger.warning(f"Async Feishu cli job {job_id} failed.")
@@ -375,6 +388,7 @@ class FeishuBotService:
         if self._owns_client and hasattr(self.client, "close"):
             logger.info("Closing Feishu bot client.")
             self.client.close()
+
 
 def _extract_text_content(raw_content: object) -> str:
     if isinstance(raw_content, str):

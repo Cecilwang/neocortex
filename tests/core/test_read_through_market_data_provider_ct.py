@@ -421,7 +421,9 @@ def test_read_through_provider_surfaces_non_retryable_profile_errors(
     provider = ReadThroughMarketDataProvider(
         store=store,
         source_connectors={
-            "baostock": FakeSourceConnector(profile_error=ValueError("bad profile payload")),
+            "baostock": FakeSourceConnector(
+                profile_error=ValueError("bad profile payload")
+            ),
             "efinance": later_source,
         },
         source_priority={
