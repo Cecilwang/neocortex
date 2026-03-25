@@ -51,7 +51,6 @@ def test_feishu_settings_use_default_storage_db_path(monkeypatch) -> None:
     settings = FeishuSettings.from_env()
 
     assert settings.db_path == app_config.storage.bot_db_path
-    assert settings.market_data_db_path == app_config.storage.market_data_db_path
 
 
 def test_get_config_reads_yaml_from_env_override(tmp_path, monkeypatch) -> None:

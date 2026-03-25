@@ -289,6 +289,26 @@ uv run python -m neocortex indicator macd \
 uv run python -m neocortex feishu longconn
 ```
 
+清理过期的 bot event receipts 和已完成 job：
+
+```bash
+uv run python -m neocortex feishu cleanup --older-than-days 3
+```
+
+Bot 聊天入口：
+
+- 群聊：必须先 `@bot`，然后发送 `help`、`job <job-id>` 或 `cli <full-cli-command>`
+- 私聊：可直接发送 `help`、`job <job-id>` 或 `cli <full-cli-command>`
+- 不再支持旧的 `/neo ...`、`profile ...`、`bars ...`、`db ...` 文本命令
+
+示例：
+
+```text
+@bot help
+@bot job 12
+@bot cli db query --table company_profiles
+```
+
 ## Shared Options
 
 所有域都支持：

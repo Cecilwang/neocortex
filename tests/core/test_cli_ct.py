@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
+from tests.core.feishu_storage_test_support import seed_cleanup_test_data
 from neocortex.cli.common import find_security_ids_by_name
 from neocortex.connectors.types import SecurityListing, TradingDateRecord
 from neocortex.models import (
@@ -633,7 +634,8 @@ def test_cli_connector_adjusted_daily_command_prints_source_records(
 
 def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
     from neocortex import cli
-    from neocortex.commands import feishu as feishu_commands
+    from neocortex.feishu import longconn as feishu_longconn
+    from neocortex.feishu import settings as feishu_settings
 
     parser_cli = importlib.import_module("neocortex.cli.main")
 
@@ -647,7 +649,7 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        feishu_commands.FeishuSettings, "from_env", lambda: fake_settings
+        feishu_settings.FeishuSettings, "from_env", lambda: fake_settings
     )
     monkeypatch.setattr(
         parser_cli,
@@ -662,7 +664,7 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
         def start(self) -> None:
             captured["started"] = True
 
-    monkeypatch.setattr(feishu_commands, "FeishuLongConnectionRunner", FakeRunner)
+    monkeypatch.setattr(feishu_longconn, "FeishuLongConnectionRunner", FakeRunner)
 
     exit_code = cli.main(
         ["--env-file", ".env.local", "--log-level", "DEBUG", "feishu", "longconn"]
@@ -676,6 +678,42 @@ def test_cli_feishu_longconn_starts_runner(monkeypatch) -> None:
         "settings": fake_settings,
         "started": True,
     }
+
+
+def test_cli_feishu_cleanup_deletes_old_terminal_jobs_and_receipts(
+    tmp_path, capsys
+) -> None:
+    from neocortex import cli
+
+    db_path = tmp_path / "feishu.sqlite3"
+    store, old_job_id, recent_job_id, running_job_id = seed_cleanup_test_data(db_path)
+
+    exit_code = cli.main(
+        [
+            "feishu",
+            "cleanup",
+            "--db-path",
+            str(db_path),
+            "--older-than-days",
+            "30",
+        ]
+    )
+
+    assert exit_code == 0
+    assert store.get_job(old_job_id) is None
+    assert store.get_job(recent_job_id) is not None
+    assert store.get_job(running_job_id) is not None
+    with sqlite3.connect(db_path) as connection:
+        event_ids = tuple(
+            row[0]
+            for row in connection.execute(
+                "select event_id from feishu_event_receipts order by event_id"
+            ).fetchall()
+        )
+    assert event_ids == ("evt-new",)
+    output = capsys.readouterr().out
+    assert "Event receipts deleted: 1" in output
+    assert "Terminal jobs deleted: 1" in output
 
 
 def test_cli_loads_default_dotenv_search_by_default(monkeypatch, capsys) -> None:
@@ -877,49 +915,6 @@ def test_cli_indicator_supports_multiple_values_after_one_param_flag(
     payload = json.loads(capsys.readouterr().out)
     assert payload["indicator"] == "macd"
     assert payload["parameters"] == {"fast_window": 10, "slow_window": 20}
-
-
-def test_cli_db_query_command_prints_table_output_from_registry(
-    tmp_path,
-    capsys,
-) -> None:
-    from neocortex import cli
-
-    db_path = tmp_path / "query.sqlite"
-    with sqlite3.connect(db_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE company_profiles (
-                symbol TEXT NOT NULL,
-                company_name TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            """
-            INSERT INTO company_profiles (symbol, company_name)
-            VALUES ('000014', '沙河股份')
-            """
-        )
-        connection.commit()
-
-    exit_code = cli.main(
-        [
-            "db",
-            "query",
-            "--db-path",
-            str(db_path),
-            "--table",
-            "company_profiles",
-        ]
-    )
-
-    output = capsys.readouterr().out
-    assert exit_code == 0
-    assert "symbol" in output
-    assert "company_name" in output
-    assert "000014" in output
-    assert "沙河股份" in output
 
 
 def test_cli_db_query_command_prints_json_output_from_registry(

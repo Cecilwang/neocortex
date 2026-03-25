@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -17,7 +17,7 @@ class JobStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class FeishuMessageEvent:
-    """Normalized text message event emitted by Feishu."""
+    """Extracted text message event emitted by Feishu."""
 
     event_id: str
     message_id: str
@@ -28,14 +28,11 @@ class FeishuMessageEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class BotCommand:
-    """Parsed structured command emitted from chat text."""
+class BotRequest:
+    """Routed bot request after activation and root-command parsing."""
 
-    name: str
+    kind: str
     text: str
-    args: dict[str, object] = field(default_factory=dict)
-    requires_admin: bool = False
-    asynchronous: bool = False
 
 
 @dataclass(frozen=True, slots=True)

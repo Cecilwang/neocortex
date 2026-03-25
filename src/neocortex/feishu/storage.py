@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
 
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 
 from neocortex.feishu.models import FeishuJobRecord, JobStatus
@@ -142,6 +144,47 @@ class FeishuBotStore:
             session.refresh(row)
             logger.info(f"Marked Feishu job failed: job_id={job_id}")
             return _to_job_record(row)
+
+    def cleanup_older_than(self, *, older_than_days: int) -> tuple[int, int]:
+        """Delete old event receipts and terminal jobs."""
+
+        if older_than_days <= 0:
+            raise ValueError("--older-than-days must be a positive integer.")
+
+        cutoff = (
+            datetime.now(UTC).replace(microsecond=0) - timedelta(days=older_than_days)
+        ).isoformat().replace("+00:00", "Z")
+        logger.info(
+            "Cleaning Feishu bot storage: "
+            f"older_than_days={older_than_days} cutoff={cutoff}"
+        )
+        with self.session_factory() as session:
+            receipts_deleted = (
+                session.execute(
+                    delete(FeishuEventReceiptRow).where(
+                        FeishuEventReceiptRow.received_at < cutoff
+                    )
+                ).rowcount
+                or 0
+            )
+            jobs_deleted = (
+                session.execute(
+                    delete(FeishuJobRow).where(
+                        FeishuJobRow.status.in_(
+                            [JobStatus.SUCCEEDED.value, JobStatus.FAILED.value]
+                        ),
+                        FeishuJobRow.finished_at.is_not(None),
+                        FeishuJobRow.finished_at < cutoff,
+                    )
+                ).rowcount
+                or 0
+            )
+            session.commit()
+        logger.info(
+            "Cleaned Feishu bot storage: "
+            f"receipts_deleted={receipts_deleted} jobs_deleted={jobs_deleted}"
+        )
+        return receipts_deleted, jobs_deleted
 
 
 def _to_job_record(row: FeishuJobRow) -> FeishuJobRecord:

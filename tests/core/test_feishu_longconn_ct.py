@@ -57,7 +57,7 @@ def test_long_connection_runner_forwards_message_events(tmp_path) -> None:
                 "chat_id": "oc_chat",
                 "chat_type": "p2p",
                 "message_type": "text",
-                "content": '{"text":"/neo help"}',
+                "content": '{"text":"help"}',
             },
         },
     )
