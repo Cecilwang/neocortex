@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from datetime import date
+import json
 import logging
 from typing import Any, Mapping
 
@@ -23,6 +25,14 @@ from neocortex.prompts import load_prompt_template, render_prompt_text
 from neocortex.serialization import parse_json_object
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentResponseValidationError(Exception):
+    message: str
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class Agent(ABC):
@@ -129,12 +139,16 @@ class Agent(ABC):
             user_prompt=user_prompt,
             inference_config=inference_config,
         )
-        parsed_output = parse_json_object(raw_output)
+        try:
+            parsed_output = parse_json_object(raw_output)
+            response = self.build_response(request, parsed_output)
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
+            raise AgentResponseValidationError(str(exc)) from exc
         logger.info(
             f"Received agent response: role={self.role.value} "
             f"request_id={request.request_id} score={parsed_output.get('score')}"
         )
-        return self.build_response(request, parsed_output)
+        return response
 
     def run(
         self,
@@ -161,9 +175,10 @@ class Agent(ABC):
         started_at = datetime.now(UTC)
         try:
             response = self.send(request, inference_config, transport=transport)
-        except Exception as exc:
-            logger.exception(
-                f"Agent run failed: role={self.role.value} request_id={request_id}"
+        except AgentResponseValidationError as exc:
+            logger.warning(
+                f"Agent response validation failed: role={self.role.value} "
+                f"request_id={request_id} error={exc}"
             )
             return AgentExecutionTrace(
                 request=request,

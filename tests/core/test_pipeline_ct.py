@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from neocortex.llm import LLMEndpoint, LLMInferenceConfig, LLMRequestConfig, LLMService
 from neocortex.models import (
     AgentRequest,
@@ -8,6 +10,7 @@ from neocortex.models import (
     AgentExecutionTrace,
     Exchange,
     Market,
+    ResponseValidationStatus,
     SecurityId,
 )
 from neocortex.pipeline import Pipeline
@@ -99,6 +102,7 @@ class RecordingAgent:
             response=response,
             inference_config=inference_config,
             started_at=date(2026, 3, 13),
+            response_validation_status=ResponseValidationStatus.PASSED,
         )
 
 
@@ -179,3 +183,65 @@ def test_pipeline_injects_upstream_reports_into_sector_and_pm(monkeypatch) -> No
     assert len(created[AgentRole.SECTOR].calls[0]["analyst_reports"]) == 4
     assert created[AgentRole.PM].calls[0]["macro_report"].agent is AgentRole.MACRO
     assert created[AgentRole.PM].calls[0]["sector_report"].agent is AgentRole.SECTOR
+
+
+def test_pipeline_stops_when_dependency_trace_failed(monkeypatch) -> None:
+    security_id = SecurityId(symbol="600519", market=Market.CN, exchange=Exchange.XSHG)
+
+    def fake_load_pipeline_document(self):
+        _ = self
+        return {
+            role.value: {"template": f"{role.value}.yaml"}
+            for role in AgentRole
+        }
+
+    class FailingTechnicalAgent(_recording_agent_class(AgentRole.TECHNICAL)):
+        def run(
+            self,
+            *,
+            request_id,
+            security_id,
+            as_of_date,
+            inference_config,
+            transport,
+            trace_by_role=None,
+        ):
+            request = AgentRequest(
+                request_id=str(request_id),
+                agent=self.role,
+                security_id=security_id,
+                as_of_date=as_of_date,
+            )
+            return AgentExecutionTrace(
+                request=request,
+                response=None,
+                inference_config=inference_config,
+                started_at=date(2026, 3, 13),
+                response_validation_status=ResponseValidationStatus.FAILED,
+                response_validation_errors=("bad output",),
+            )
+
+    agent_classes = {role: _recording_agent_class(role) for role in AgentRole}
+    agent_classes[AgentRole.TECHNICAL] = FailingTechnicalAgent
+
+    monkeypatch.setattr(
+        "neocortex.pipeline.pipeline.Pipeline._load_pipeline_document",
+        fake_load_pipeline_document,
+    )
+    monkeypatch.setattr("neocortex.pipeline.pipeline._AGENT_CLASSES", agent_classes)
+    pipeline = Pipeline(transport=RecordingTransport())
+
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot run agent sector: dependency technical failed.",
+    ):
+        pipeline.run_agent(
+            AgentRole.SECTOR,
+            security_id=security_id,
+            as_of_date=date(2026, 3, 13),
+            request_id="req-pipeline-002",
+            inference_config=_inference_config(),
+            trace_by_role={},
+        )
+
+    assert pipeline.get_agent(AgentRole.SECTOR).calls == []

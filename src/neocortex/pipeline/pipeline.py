@@ -18,7 +18,12 @@ from neocortex.config import get_config
 from neocortex.llm import LLMInferenceConfig
 from neocortex.llm.transport import LLMTransport
 from neocortex.market_data_provider import MarketDataProvider
-from neocortex.models import AgentExecutionTrace, AgentRole, SecurityId
+from neocortex.models import (
+    AgentExecutionTrace,
+    AgentRole,
+    ResponseValidationStatus,
+    SecurityId,
+)
 
 _AGENT_CLASSES: dict[AgentRole, type[Agent]] = {
     AgentRole.TECHNICAL: TechnicalAgent,
@@ -110,6 +115,19 @@ class Pipeline:
                 inference_config=inference_config,
                 trace_by_role=trace_by_role,
             )
+        for dependency in agent.dependencies:
+            dependency_trace = trace_by_role[dependency]
+            if (
+                dependency_trace.response is None
+                or dependency_trace.response_validation_status
+                not in (
+                    ResponseValidationStatus.PASSED,
+                    ResponseValidationStatus.REPAIRED,
+                )
+            ):
+                raise RuntimeError(
+                    f"Cannot run agent {role.value}: dependency {dependency.value} failed."
+                )
 
         trace = agent.run(
             request_id=f"{request_id}-{role.value}",

@@ -38,10 +38,16 @@ def load_prompt_template(template_name: str) -> PromptTemplate:
     raw_dependencies = document.get("dependencies", [])
     if not isinstance(raw_dependencies, list):
         raise ValueError("Prompt template YAML 'dependencies' must be a list.")
+    raw_system = document["system"]
+    raw_user = document["user"]
+    if not isinstance(raw_system, str):
+        raise ValueError("Prompt template YAML 'system' must be a string.")
+    if not isinstance(raw_user, str):
+        raise ValueError("Prompt template YAML 'user' must be a string.")
     template = PromptTemplate(
         dependencies=tuple(AgentRole(value) for value in raw_dependencies),
-        system=str(document["system"]),
-        user=str(document["user"]),
+        system=raw_system,
+        user=raw_user,
     )
     logger.info(
         f"Loaded prompt template: name={template_name} "
@@ -69,13 +75,7 @@ def _render_template_text(
     template_text: str,
     **context: Any,
 ) -> str:
-    environment = Environment(
-        undefined=StrictUndefined,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    environment.filters["decimal"] = _format_decimal
-    return environment.from_string(template_text).render(**context)
+    return _PROMPT_ENVIRONMENT.from_string(template_text).render(**context)
 
 
 def _format_decimal(value: Any, precision: int = 6) -> str:
@@ -85,3 +85,11 @@ def _format_decimal(value: Any, precision: int = 6) -> str:
         return f"{float(value):.{precision}f}"
     except (TypeError, ValueError):
         return str(value)
+
+
+_PROMPT_ENVIRONMENT = Environment(
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
+_PROMPT_ENVIRONMENT.filters["decimal"] = _format_decimal
