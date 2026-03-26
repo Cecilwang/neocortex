@@ -11,7 +11,13 @@ from neocortex.commands import (
     ExecutionMode,
     Exposure,
 )
-from neocortex.feishu.service import FeishuBotService
+from neocortex.feishu.service import (
+    FeishuBotService,
+    _REACTION_FAILED,
+    _REACTION_IGNORED,
+    _REACTION_PROCESSING,
+    _REACTION_SUCCEEDED,
+)
 from neocortex.feishu.settings import FeishuSettings
 from neocortex.feishu.storage import FeishuBotStore
 from tests.core.feishu_test_support import FakeClient, FakeExecutor, ImmediateExecutor
@@ -172,6 +178,7 @@ def test_group_message_without_activation_is_ignored(tmp_path) -> None:
     service.handle_event_payload(_message_event(text="/neo help"))
 
     assert client.messages == []
+    assert client.reactions == [{"message_id": "msg-1", "emoji_type": _REACTION_IGNORED}]
 
 
 def test_p2p_help_message_sends_help_message(tmp_path) -> None:
@@ -184,6 +191,32 @@ def test_p2p_help_message_sends_help_message(tmp_path) -> None:
     assert client.messages[0]["chat_id"] == "oc_test_chat"
     assert "Available commands:" in client.messages[0]["text"]
     assert "cli <full-cli-command>" in client.messages[0]["text"]
+    assert client.reactions == [
+        {"message_id": "msg-1", "emoji_type": _REACTION_PROCESSING},
+        {"message_id": "msg-1", "emoji_type": _REACTION_SUCCEEDED},
+    ]
+
+
+def test_retry_failed_event_is_skipped_after_failure_reply_sent(tmp_path) -> None:
+    client = FakeClient()
+    store = FeishuBotStore(tmp_path / "feishu.sqlite3")
+    service = FeishuBotService(_settings(tmp_path), client=client, store=store)
+    client.fail_next_send = RuntimeError("status=400 body={'code':123,'msg':'too large'}")
+
+    payload = _message_event(text="help", chat_type="p2p", event_id="evt-fail")
+
+    service.handle_event_payload(payload)
+    service.handle_event_payload(payload)
+
+    assert len(client.messages) == 1
+    assert client.messages[0]["text"] == (
+        "Failed to handle event.\n"
+        "RuntimeError: status=400 body={'code':123,'msg':'too large'}"
+    )
+    assert client.reactions == [
+        {"message_id": "msg-1", "emoji_type": _REACTION_PROCESSING},
+        {"message_id": "msg-1", "emoji_type": _REACTION_FAILED},
+    ]
 
 
 def test_group_placeholder_mention_matching_mentions_metadata_activates_command(

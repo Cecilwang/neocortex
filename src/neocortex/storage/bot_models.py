@@ -18,7 +18,9 @@ class FeishuEventReceiptRow(BotBase):
 
     event_id: Mapped[str] = mapped_column(String, primary_key=True)
     message_id: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
     received_at: Mapped[str] = mapped_column(String, nullable=False)
+    error_text: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class FeishuJobRow(BotBase):

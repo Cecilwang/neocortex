@@ -78,6 +78,14 @@ class JobStatus(StrEnum):
     FAILED = "failed"
 
 
+class EventReceiptStatus(StrEnum):
+    """Supported Feishu event receipt lifecycle states."""
+
+    PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True, slots=True)
 class FeishuMention:
     """One structured mention extracted from a Feishu message payload."""
@@ -144,3 +152,14 @@ class FeishuJobRecord:
             reply_to_message_id=self.reply_to_message_id,
             reply_in_thread=self.reply_in_thread,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class FeishuEventReceiptRecord:
+    """One persisted Feishu event receipt."""
+
+    event_id: str
+    message_id: str
+    status: EventReceiptStatus
+    received_at: str
+    error_text: str | None = None

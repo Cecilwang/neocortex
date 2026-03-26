@@ -3,7 +3,7 @@ import sqlite3
 import pytest
 
 from neocortex.feishu.storage import FeishuBotStore
-from neocortex.feishu.models import JobStatus
+from neocortex.feishu.models import EventReceiptStatus, JobStatus
 from tests.core.feishu_storage_test_support import seed_cleanup_test_data
 
 
@@ -15,6 +15,22 @@ def test_record_event_is_idempotent(tmp_path) -> None:
 
     assert first is True
     assert second is False
+
+
+def test_begin_event_tracks_processing_and_failure_status(tmp_path) -> None:
+    store = FeishuBotStore(tmp_path / "feishu.sqlite3")
+
+    is_new, receipt = store.begin_event(event_id="evt-1", message_id="msg-1")
+    assert is_new is True
+    assert receipt.status is EventReceiptStatus.PROCESSING
+    assert receipt.error_text is None
+
+    store.mark_event_failed("evt-1", error_text="RuntimeError: boom")
+
+    is_new, duplicate = store.begin_event(event_id="evt-1", message_id="msg-1")
+    assert is_new is False
+    assert duplicate.status is EventReceiptStatus.FAILED
+    assert duplicate.error_text == "RuntimeError: boom"
 
 
 def test_job_state_transitions_round_trip_through_store(tmp_path) -> None:

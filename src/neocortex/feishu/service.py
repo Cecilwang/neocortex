@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import shlex
-from typing import Any
+from typing import Any, Callable
 
 from neocortex.commands import (
     CommandActor,
@@ -28,6 +28,7 @@ from neocortex.commands import (
 from neocortex.feishu.cards import build_table_card
 from neocortex.feishu.client import FeishuClient
 from neocortex.feishu.models import (
+    EventReceiptStatus,
     BotRequest,
     FeishuCardResp,
     FeishuDefaultHelpResp,
@@ -51,6 +52,10 @@ _AT_TAG_PATTERN = re.compile(r"<at\b[^>]*>.*?</at>", re.DOTALL)
 _LEADING_AT_TAGS_PATTERN = re.compile(r"^(?:\s*<at\b[^>]*>.*?</at>\s*)+", re.DOTALL)
 _LEADING_PLACEHOLDER_MENTION_PATTERN = re.compile(r"^(?:@_user_\d+\s*)+")
 _AT_TARGET_PATTERN = re.compile(r'(?:user_id|open_id|id)="([^"]+)"')
+_REACTION_PROCESSING = "OneSecond"
+_REACTION_SUCCEEDED = "CheckMark"
+_REACTION_FAILED = "CrossMark"
+_REACTION_IGNORED = "18X"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +68,12 @@ class _LeadingAtTags:
 class _LeadingPlaceholderMentions:
     keys: tuple[str, ...]
     remainder: str
+
+
+@dataclass(frozen=True, slots=True)
+class _BuiltResponse:
+    response: FeishuResp
+    after_send: Callable[[], None] | None = None
 
 
 class FeishuMessageNormalizer:
@@ -223,81 +234,129 @@ class FeishuBotService:
             f"Received Feishu message: event_id={event.event_id} chat_id={event.chat_id} "
             f"chat_type={event.chat_type} sender={event.sender_id}"
         )
-        if not self.store.record_event(
+        is_new, receipt = self.store.begin_event(
             event_id=event.event_id, message_id=event.message_id
-        ):
-            logger.info(f"Skipping duplicate Feishu event {event.event_id}.")
-            return
-
-        request = self.router.parse(event)
-        if request is None:
-            logger.info(f"Ignoring non-command message {event.message_id}.")
-            return
-
-        logger.info(
-            f"Routed Feishu request: kind={request.kind} event_id={event.event_id}"
         )
+        if not is_new:
+            if receipt.status is EventReceiptStatus.SUCCEEDED:
+                logger.info(f"Skipping duplicate Feishu event {event.event_id}.")
+                return
+            if receipt.status is EventReceiptStatus.FAILED:
+                logger.info(
+                    f"Skipping duplicate failed Feishu event {event.event_id}."
+                )
+                return
+            logger.info(
+                f"Skipping in-progress duplicate Feishu event {event.event_id}."
+            )
+            return
+
+        try:
+            request = self.router.parse(event)
+            if request is None:
+                logger.info(f"Ignoring non-command message {event.message_id}.")
+                self._add_reaction_best_effort(
+                    message_id=event.message_id, emoji_type=_REACTION_IGNORED
+                )
+                self.store.mark_event_succeeded(event.event_id)
+                return
+
+            logger.info(
+                f"Routed Feishu request: kind={request.kind} event_id={event.event_id}"
+            )
+            self._add_reaction_best_effort(
+                message_id=event.message_id, emoji_type=_REACTION_PROCESSING
+            )
+            built = self._build_response(event, request)
+            self.client.send(built.response)
+            if built.after_send is not None:
+                built.after_send()
+        except Exception as exc:
+            error_text = f"{type(exc).__name__}: {exc}"
+            logger.exception(f"Feishu event handling failed: event_id={event.event_id}")
+            self.store.mark_event_failed(event.event_id, error_text=error_text)
+            self._add_reaction_best_effort(
+                message_id=event.message_id, emoji_type=_REACTION_FAILED
+            )
+            self._send_failure_best_effort(
+                event,
+                f"Failed to handle event.\n{error_text}",
+            )
+            return
+
+        self.store.mark_event_succeeded(event.event_id)
+        self._add_reaction_best_effort(
+            message_id=event.message_id,
+            emoji_type=_REACTION_SUCCEEDED if built.response.ok else _REACTION_FAILED,
+        )
+
+    def _build_response(
+        self,
+        event: FeishuMessageEvent,
+        request: BotRequest,
+    ) -> _BuiltResponse:
         if request.kind == "cli":
-            self._handle_cli_request(event, request)
-            return
+            return self._handle_cli_request(event, request)
         if request.kind == "help":
-            self.client.send(FeishuDefaultHelpResp(target=event.target))
-            return
+            return _BuiltResponse(response=FeishuDefaultHelpResp(target=event.target))
         if request.kind == "job":
-            self.client.send(
-                FeishuTextResp(
+            return _BuiltResponse(
+                response=FeishuTextResp(
                     target=event.target, text=self._render_job_status(request)
                 )
             )
-            return
         logger.warning(
             f"Invalid Feishu command: event_id={event.event_id} "
             f"chat_type={event.chat_type} sender={event.sender_id}"
         )
-        self.client.send(
-            FeishuFailedWithDefaultHelpResp(
-                target=event.target, text="Invalid command."
+        return _BuiltResponse(
+            response=FeishuFailedWithDefaultHelpResp(
+                target=event.target,
+                text="Invalid command.",
             )
         )
 
     def _handle_cli_request(
         self, event: FeishuMessageEvent, request: BotRequest
-    ) -> None:
+    ) -> _BuiltResponse:
         logger.info(
             f"Handling Feishu cli request: event_id={event.event_id} sender={event.sender_id}"
         )
         try:
             invocation = _parse_cli_invocation(_cli_tokens(request))
         except CommandHelpRequested as exc:
-            self.client.send(FeishuHelpResp(target=event.target, text=exc.help_text))
-            return
+            return _BuiltResponse(
+                response=FeishuHelpResp(target=event.target, text=exc.help_text)
+            )
         except CommandUsageError as exc:
             text = exc.message
             if exc.help_text:
                 text = f"{text}\n\n{exc.help_text}"
-                self.client.send(FeishuFailedResp(target=event.target, text=text))
-                return
-            else:
-                self.client.send(
-                    FeishuFailedWithDefaultHelpResp(target=event.target, text=text)
+                return _BuiltResponse(
+                    response=FeishuFailedResp(target=event.target, text=text)
                 )
-                return
+            else:
+                return _BuiltResponse(
+                    response=FeishuFailedWithDefaultHelpResp(
+                        target=event.target, text=text
+                    )
+                )
         except ValueError as exc:
-            self.client.send(FeishuFailedResp(target=event.target, text=str(exc)))
-            return
+            return _BuiltResponse(
+                response=FeishuFailedResp(target=event.target, text=str(exc))
+            )
 
         if invocation.spec.exposure is Exposure.CLI_ONLY:
             logger.warning(
                 f"Rejected cli-only Feishu command: path={invocation.spec.path} "
                 f"sender={event.sender_id}"
             )
-            self.client.send(
-                FeishuFailedResp(
+            return _BuiltResponse(
+                response=FeishuFailedResp(
                     target=event.target,
                     text=f"{invocation.spec.path} is only available from the CLI.",
                 )
             )
-            return
 
         context = self._build_command_context(event)
         dispatcher = CommandDispatcher()
@@ -314,22 +373,24 @@ class FeishuBotService:
             logger.info(
                 f"Queued Feishu cli async job_id={job.id} command={invocation.spec.path}"
             )
-            self.client.send(
-                FeishuTextResp(
+            return _BuiltResponse(
+                response=FeishuTextResp(
                     target=event.target,
                     text=(
                         f"Accepted job {job.id}: {invocation.spec.path}. "
                         f"Use `job {job.id}` to query status."
                     ),
-                )
+                ),
+                after_send=lambda: self.executor.submit(
+                    self._run_cli_job, job.id, invocation, context
+                ),
             )
-            self.executor.submit(self._run_cli_job, job.id, invocation, context)
-            return
 
-        response = self._execute_cli_invocation(
-            invocation, context, event.target, dispatcher=dispatcher
+        return _BuiltResponse(
+            response=self._execute_cli_invocation(
+                invocation, context, event.target, dispatcher=dispatcher
+            )
         )
-        self.client.send(response)
 
     def _build_command_context(self, event: FeishuMessageEvent) -> CommandContext:
         return CommandContext(
@@ -441,6 +502,22 @@ class FeishuBotService:
         if self._owns_client and hasattr(self.client, "close"):
             logger.info("Closing Feishu bot client.")
             self.client.close()
+
+    def _add_reaction_best_effort(self, *, message_id: str, emoji_type: str) -> None:
+        try:
+            self.client.add_reaction(message_id=message_id, emoji_type=emoji_type)
+        except Exception:
+            logger.exception(
+                f"Failed to add Feishu reaction: message_id={message_id} emoji_type={emoji_type}"
+            )
+
+    def _send_failure_best_effort(self, event: FeishuMessageEvent, text: str) -> None:
+        try:
+            self.client.send(FeishuFailedResp(target=event.target, text=text))
+        except Exception:
+            logger.exception(
+                f"Failed to send Feishu failure reply: event_id={event.event_id}"
+            )
 
 
 def _extract_text_content(raw_content: object) -> str:

@@ -17,10 +17,16 @@ from neocortex.feishu.models import (
 class FakeClient:
     def __init__(self) -> None:
         self.messages: list[dict[str, object]] = []
+        self.reactions: list[dict[str, str]] = []
         self.closed = False
         self.bot_open_id = "ou_bot"
+        self.fail_next_send: Exception | None = None
 
     def send(self, response: FeishuResp) -> None:
+        if self.fail_next_send is not None:
+            exc = self.fail_next_send
+            self.fail_next_send = None
+            raise exc
         msg_type = "interactive" if isinstance(response, FeishuCardResp) else "text"
         text = _render_fake_text(response)
         card = (
@@ -38,6 +44,9 @@ class FakeClient:
                 "reply_in_thread": response.target.reply_in_thread,
             }
         )
+
+    def add_reaction(self, *, message_id: str, emoji_type: str) -> None:
+        self.reactions.append({"message_id": message_id, "emoji_type": emoji_type})
 
     def get_bot_open_id(self) -> str:
         return self.bot_open_id

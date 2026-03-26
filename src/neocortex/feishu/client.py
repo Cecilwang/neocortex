@@ -79,6 +79,18 @@ class FeishuClient:
             json=payload,
         )
 
+    def add_reaction(self, *, message_id: str, emoji_type: str) -> None:
+        """Add one emoji reaction to a message."""
+
+        logger.info(
+            f"Calling Feishu add_reaction API: message_id={message_id} emoji_type={emoji_type}"
+        )
+        self._request(
+            "POST",
+            f"/open-apis/im/v1/messages/{message_id}/reactions",
+            json={"reaction_type": {"emoji_type": emoji_type}},
+        )
+
     def get_bot_open_id(self) -> str:
         """Resolve and cache the current bot open_id from Feishu."""
 
@@ -128,8 +140,14 @@ class FeishuClient:
             json=json,
             headers=headers,
         )
-        response.raise_for_status()
-        document = response.json()
+        try:
+            document = response.json()
+        except ValueError:
+            document = {"raw_text": response.text}
+        if response.is_error:
+            raise RuntimeError(
+                f"Feishu API request failed: status={response.status_code} body={document}"
+            )
         if document.get("code") not in (None, 0):
             raise RuntimeError(f"Feishu API request failed: {document}")
         logger.debug(f"Feishu API request succeeded: path={path}")
