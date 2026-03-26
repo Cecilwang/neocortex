@@ -1,0 +1,7 @@
+interface:
+  display_name: "Neocortex"
+  short_description: "Run the local neocortex CLI for market data and diagnostics."
+  default_prompt: "Use $neocortex to run a local neocortex CLI command against a checked-out repo."
+
+policy:
+  allow_implicit_invocation: true

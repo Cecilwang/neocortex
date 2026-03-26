@@ -323,10 +323,140 @@ uv run python -m neocortex --env-file .env.local ...
 - `--log-level` 控制日志级别
 - 未传 `--env-file` 时，CLI 会先走 `python-dotenv` 的默认查找逻辑
 - `--env-file` 会覆盖默认查找路径，并在构建完整 parser 之前先加载环境变量
-- 对支持日期区间的命令，未传 `--end-date` 时默认取当天；未传 `--start-date` 时默认取 `end-date` 往前 10 年
+- 对支持日期区间的命令，未传 `--start-date` 时默认取 `end-date` 往前 10 年
 - `market-data-provider trading-dates` 支持 `--date` 单点查询，或 `--start-date/--end-date` 区间查询；不支持未来日期
 - 需要证券标识的命令通常支持 `--symbol` 或 `--name` 二选一；`--name` 依赖本地 market-data DB 中已有 alias 数据
 - `CN` 市场下使用 `--symbol` 时可以省略 `--exchange`，CLI 会根据 `symbol` 自动推断；其他市场仍建议显式传 `--exchange`
 - `indicator <指标名>` 默认 `--format table`
 - `indicator <指标名>` 默认 `--adjust qfq`
 - `agent render` 默认 `--format json`
+
+## Agent Skill Usage
+
+这一节面向把 `neocortex` 当作本地 skill 调用的 agent。
+
+### Entry Principles
+
+- 优先走本地 CLI，不通过 Feishu bot 间接调用
+- 标准入口固定为：
+
+```bash
+uv run python -m neocortex ...
+```
+
+- 顶层共享参数始终放在命令前：
+
+```bash
+uv run python -m neocortex --env-file .env.local --log-level DEBUG ...
+```
+
+### Domain Selection Guide
+
+- `market-data-provider`
+  - 统一运行时读数据入口，默认优先使用
+  - 适合查证券列表、公司概况、历史行情、交易日历、基本面和披露内容
+- `indicator`
+  - 基于统一 provider 取行情并计算技术指标
+  - 默认优先于手工拼 `market-data-provider bars` + 外部计算
+- `connector`
+  - 只在调试单个 source 行为、排查 source 差异、验证上游 payload 时使用
+- `db`
+  - 只在直接查底表、核对持久化结果、做 SQLite 排障时使用
+- `sync`
+  - 只在显式同步/回填数据时使用
+- `agent`
+  - 只在调试单个 agent 的 request 和 prompt 渲染时使用
+- `feishu`
+  - 只用于 bot transport 管理，不是通用市场数据入口
+
+### Typical Agent Calling Patterns
+
+- 查公司概况：优先 `market-data-provider profile`
+- 查历史行情：优先 `market-data-provider bars`
+- 算技术指标：优先 `indicator <name>`
+- 调试单源异常：再切到 `connector`
+- 直接看 SQLite 表或排障：才用 `db query`
+
+### Output Conventions
+
+- CLI 的业务结果输出到标准输出；诊断信息走 logging
+- 默认输出通常是表格文本；skill 消费时优先选结构化输出
+- 当前高频 JSON 路径：
+  - `db query --format json`
+  - `indicator <name> --format json`
+  - `agent render --format json`
+  - `market-data-provider profile`
+  - `market-data-provider fundamentals`
+  - `market-data-provider disclosures`
+  - `market-data-provider macro`
+  - `sync securities`
+  - `sync bars`
+  - `sync trading-dates`
+- 不支持 JSON 的命令目前只能消费表格文本，例如：
+  - `market-data-provider bars`
+  - `market-data-provider securities`
+  - 多数 `connector` 列表和行情命令
+
+### Failure Semantics
+
+- usage/help 错误会直接返回命令自己的帮助文本
+- `db query` 只允许单条只读 SQL；写操作、DDL、多语句和非法表名会被拒绝
+- command kernel 约束一个 `CommandSpec` 对应一个叶子命令；选项必须挂在叶子上
+- `CN` 市场下，未显式传 `--end-date` / `--as-of-date` 时，会使用 market-aware 默认日期规则，而不是盲目取当天
+- `sync bars` 必须且只能选择一种目标模式：
+  - `--symbol` / `--name`
+  - `--ticker`
+  - `--all-securities`
+- `sync bars --all-securities` 在 Feishu transport 中会走 async job；本地 CLI 仍同步执行
+
+### Copyable Agent Examples
+
+查统一视图下的公司概况：
+
+```bash
+uv run python -m neocortex market-data-provider profile --name 中芯国际
+```
+
+查统一视图下的历史行情：
+
+```bash
+uv run python -m neocortex market-data-provider bars \
+  --name 中芯国际 \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-20
+```
+
+用结构化输出计算指标：
+
+```bash
+uv run python -m neocortex indicator macd \
+  --name 中芯国际 \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-20 \
+  --format json
+```
+
+调试单个 source 的公司概况：
+
+```bash
+uv run python -m neocortex connector efinance profile --name 中芯国际
+```
+
+直接查 SQLite 底表：
+
+```bash
+uv run python -m neocortex db query \
+  --table daily_price_bars \
+  --limit 20 \
+  --format json
+```
+
+调试单个 agent 的 prompt 渲染：
+
+```bash
+uv run python -m neocortex agent render \
+  --role technical \
+  --name 中芯国际 \
+  --as-of-date 2026-03-20 \
+  --format json
+```
