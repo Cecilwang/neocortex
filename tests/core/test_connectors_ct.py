@@ -11,6 +11,8 @@ from neocortex.connectors.types import (
 from neocortex.markets import get_market_context
 from neocortex.models import (
     Exchange,
+    FundamentalStatement,
+    FundamentalValueOrigin,
     Market,
     SecurityId,
 )
@@ -391,7 +393,7 @@ def test_trading_date_repository_returns_next_and_previous_trading_dates(
     ) == date(2026, 1, 6)
 
 
-def test_fundamental_snapshots_accept_non_enumerated_statement_kind(tmp_path) -> None:
+def test_fundamental_snapshots_keep_versions_by_announcement_date(tmp_path) -> None:
     db_path = tmp_path / "market.sqlite3"
     store = MarketDataStore(db_path)
     store.ensure_schema()
@@ -406,26 +408,37 @@ def test_fundamental_snapshots_accept_non_enumerated_statement_kind(tmp_path) ->
             FundamentalSnapshotRecord(
                 source="baostock",
                 security_id=security_id,
-                period_end_date="2025-12-31",
-                canonical_period_label="2025FY",
-                statement_kind="valuation",
-                provider_period_label="2025年报",
-                report_date="2026-03-10",
-                currency="CNY",
-                raw_items_json='{"pe": 20.0}',
-                derived_metrics_json='{"roe": 0.18}',
+                report_date="2025-12-31",
+                ann_date="2026-03-10",
+                fetch_at="2026-03-19T00:00:00Z",
+                statement=FundamentalStatement.ROE,
+                value=0.18,
+                value_origin=FundamentalValueOrigin.FETCHED,
+            ),
+            FundamentalSnapshotRecord(
+                source="baostock",
+                security_id=security_id,
+                report_date="2025-12-31",
+                ann_date="2026-04-20",
+                fetch_at="2026-04-20T00:00:00Z",
+                statement=FundamentalStatement.ROE,
+                value=0.20,
+                value_origin=FundamentalValueOrigin.FETCHED,
             ),
         ),
-        fetched_at="2026-03-19T00:00:00Z",
     )
 
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT statement_kind, provider_period_label, raw_items_json, derived_metrics_json
+            SELECT report_date, ann_date, statement, value, value_origin
             FROM fundamental_snapshots
+            ORDER BY ann_date
             """
         ).fetchall()
 
-    assert written == 1
-    assert rows == [("valuation", "2025年报", '{"pe": 20.0}', '{"roe": 0.18}')]
+    assert written == 2
+    assert rows == [
+        ("2025-12-31", "2026-03-10", "roe", 0.18, "fetched"),
+        ("2025-12-31", "2026-04-20", "roe", 0.2, "fetched"),
+    ]

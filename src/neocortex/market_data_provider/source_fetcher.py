@@ -100,10 +100,7 @@ class SourceRouteFetcher(SourceRoutedComponent):
         if not fetched:
             raise KeyError(security_id)
         self._ensure_security_exists(security_id)
-        self.store.fundamental_snapshots.upsert_many(
-            fetched,
-            fetched_at=utc_now_iso(),
-        )
+        self.store.fundamental_snapshots.upsert_many(fetched)
         return tuple(fundamental_snapshot_from_record(record) for record in fetched)
 
     @route_by_source(RESOURCE_DISCLOSURES)

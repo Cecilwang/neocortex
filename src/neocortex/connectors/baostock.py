@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import importlib
-import json
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import wraps
 import logging
 from typing import Any
@@ -26,11 +25,18 @@ from neocortex.connectors.types import (
     SecurityProfileSnapshot,
     TradingDateRecord,
 )
-from neocortex.models import Exchange, Market, SecurityId
+from neocortex.models import (
+    Exchange,
+    FundamentalStatement,
+    FundamentalValueOrigin,
+    Market,
+    SecurityId,
+)
 from neocortex.utils.retry import connector_retry
 
 logger = logging.getLogger(__name__)
 _CN_TRADING_CALENDAR = "XSHG"
+_FUNDAMENTAL_LOOKBACK_QUARTERS = 8
 
 
 def _security_id_from_baostock(code: str) -> SecurityId:
@@ -48,6 +54,94 @@ def _to_baostock_code(security_id: SecurityId) -> str:
     if security_id.exchange is Exchange.XSHE:
         return f"sz.{security_id.symbol}"
     raise NotImplementedError("BaoStockConnector currently supports only XSHG/XSHE.")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _recent_quarters(
+    as_of_date: date,
+    *,
+    count: int = _FUNDAMENTAL_LOOKBACK_QUARTERS,
+) -> tuple[tuple[int, int], ...]:
+    year = as_of_date.year
+    quarter = (as_of_date.month + 2) // 3
+    periods: list[tuple[int, int]] = []
+    for _ in range(count):
+        periods.append((year, quarter))
+        quarter -= 1
+        if quarter == 0:
+            year -= 1
+            quarter = 4
+    return tuple(periods)
+
+
+def _frame_value(frame: pd.DataFrame, *columns: str) -> float | None:
+    if frame.empty:
+        return None
+    row = frame.iloc[0]
+    for column in columns:
+        if column in frame.columns:
+            value = optional_float(row.get(column))
+            if value is not None:
+                return value
+    return None
+
+
+def _frame_text(frame: pd.DataFrame, *columns: str) -> str | None:
+    if frame.empty:
+        return None
+    row = frame.iloc[0]
+    for column in columns:
+        if column in frame.columns:
+            value = row.get(column)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def _extract_snapshot_date(
+    frames: dict[str, pd.DataFrame],
+    *columns: str,
+) -> str | None:
+    for frame in frames.values():
+        value = _frame_text(frame, *columns)
+        if value is not None:
+            return value
+    return None
+
+
+def _append_metric(
+    records: list[FundamentalSnapshotRecord],
+    *,
+    security_id: SecurityId,
+    report_date: str,
+    ann_date: str,
+    fetch_at: str,
+    statement: FundamentalStatement,
+    value: float | None,
+    value_origin: FundamentalValueOrigin,
+) -> None:
+    if value is None:
+        return
+    records.append(
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date=report_date,
+            ann_date=ann_date,
+            fetch_at=fetch_at,
+            statement=statement,
+            value=value,
+            value_origin=value_origin,
+        )
+    )
 
 
 @contextmanager
@@ -324,36 +418,515 @@ class _BaoStockApiClient:
             f"Fetching BaoStock fundamentals: security={security_id.ticker} "
             f"as_of_date={as_of_date}"
         )
-        year = as_of_date.year
-        quarter = (as_of_date.month + 2) // 3
         fetchers = {
             "profitability": api.query_profit_data,
             "operating_efficiency": api.query_operation_data,
             "growth": api.query_growth_data,
             "balance_sheet": api.query_balance_data,
             "cash_flow": api.query_cash_flow_data,
+            "dupont": api.query_dupont_data,
         }
-        frames = {
-            kind: self._result_to_frame(fetcher(code=code, year=year, quarter=quarter))
-            for kind, fetcher in fetchers.items()
-        }
-        period_end_date = _quarter_period_end(year, quarter)
-        label = f"{year}Q{quarter}"
+        fetched_at = _utc_now_iso()
         records: list[FundamentalSnapshotRecord] = []
-        for kind, frame in frames.items():
-            raw_json = frame.to_json(orient="records", force_ascii=False)
-            records.append(
-                FundamentalSnapshotRecord(
-                    source="baostock",
-                    security_id=security_id,
-                    period_end_date=period_end_date,
-                    canonical_period_label=label,
-                    statement_kind=kind,
-                    provider_period_label=label,
-                    raw_items_json=raw_json if raw_json != "[]" else "{}",
-                    derived_metrics_json=json.dumps({}, ensure_ascii=False),
-                    currency="CNY",
+        for year, quarter in _recent_quarters(as_of_date):
+            frames = {
+                kind: self._result_to_frame(
+                    fetcher(code=code, year=year, quarter=quarter)
                 )
+                for kind, fetcher in fetchers.items()
+            }
+            if all(frame.empty for frame in frames.values()):
+                continue
+
+            report_date = (
+                _extract_snapshot_date(
+                    frames,
+                    "statDate",
+                    "statdate",
+                    "reportDate",
+                    "report_date",
+                )
+                or _quarter_period_end(year, quarter)
+            )
+            ann_date = _extract_snapshot_date(
+                frames,
+                "pubDate",
+                "pubdate",
+                "annDate",
+                "ann_date",
+            )
+            if ann_date is None:
+                raise ValueError(
+                    "BaoStock fundamental snapshot is missing ann_date."
+                )
+
+            profitability = frames["profitability"]
+            operating = frames["operating_efficiency"]
+            growth = frames["growth"]
+            balance = frames["balance_sheet"]
+            cash_flow = frames["cash_flow"]
+            dupont = frames["dupont"]
+
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.NET_MARGIN,
+                value=_frame_value(profitability, "npMargin", "netProfitMargin"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.GP_MARGIN,
+                value=_frame_value(profitability, "gpMargin"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.NET_PROFIT,
+                value=_frame_value(profitability, "netProfit"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.MAIN_BUSINESS_REVENUE,
+                value=_frame_value(profitability, "MBRevenue"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.TOTAL_SHARE,
+                value=_frame_value(profitability, "totalShare"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.TRADABLE_SHARE,
+                value=_frame_value(profitability, "liqaShare"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.ROA,
+                value=_frame_value(profitability, "ROA", "roa", "roaTotal"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.ROE,
+                value=_frame_value(profitability, "roeAvg", "ROE", "roe"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.AR_TURN_RATIO,
+                value=_frame_value(operating, "NRTurnRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.AR_TURN_DAYS,
+                value=_frame_value(operating, "NRTurnDays"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.INV_TURN_RATIO,
+                value=_frame_value(operating, "INVTurnRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.ASSET_TURN,
+                value=_frame_value(operating, "AssetTurnRatio", "assetTurnRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.INV_TURN_DAYS,
+                value=_frame_value(operating, "INVTurnDays", "invTurnDays"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CA_TURN_RATIO,
+                value=_frame_value(operating, "CATurnRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.QUICK_RATIO,
+                value=_frame_value(balance, "quickRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CURRENT_RATIO,
+                value=_frame_value(balance, "currentRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CASH_RATIO,
+                value=_frame_value(balance, "cashRatio"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.SALES_YOY,
+                value=_frame_value(growth, "YOYOr", "YOYRevenue", "YOYTR"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.EQUITY_YOY,
+                value=_frame_value(growth, "YOYEquity"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.ASSET_YOY,
+                value=_frame_value(growth, "YOYAsset"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.NET_INCOME_YOY,
+                value=_frame_value(growth, "YOYNI"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.EPS_TTM,
+                value=_frame_value(profitability, "epsTTM"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.EPS_GROWTH,
+                value=_frame_value(growth, "YOYEPSBasic", "YOYEPS", "epsGrowth"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.PARENT_NET_INCOME_YOY,
+                value=_frame_value(growth, "YOYPNI"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+
+            liability_to_asset = _frame_value(
+                balance,
+                "liabilityToAsset",
+                "debtAssetRatio",
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.LIABILITY_TO_ASSET,
+                value=liability_to_asset,
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            direct_equity_ratio = _frame_value(balance, "equityToAsset", "equityRatio")
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.ASSET_TO_EQUITY,
+                value=_frame_value(balance, "assetToEquity"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.LIABILITY_YOY,
+                value=_frame_value(balance, "YOYLiability"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            equity_ratio = direct_equity_ratio
+            equity_origin = FundamentalValueOrigin.FETCHED
+            if equity_ratio is None and liability_to_asset is not None:
+                equity_ratio = 1.0 - liability_to_asset
+                equity_origin = FundamentalValueOrigin.DERIVED
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.EQUITY_RATIO,
+                value=equity_ratio,
+                value_origin=equity_origin,
+            )
+
+            direct_de_ratio = _frame_value(balance, "debtToEquity", "deRatio", "DTRatio")
+            de_ratio = direct_de_ratio
+            de_origin = FundamentalValueOrigin.FETCHED
+            if de_ratio is None and liability_to_asset is not None and 0 <= liability_to_asset < 1:
+                equity = 1.0 - liability_to_asset
+                if equity > 0:
+                    de_ratio = liability_to_asset / equity
+                    de_origin = FundamentalValueOrigin.DERIVED
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DE_RATIO,
+                value=de_ratio,
+                value_origin=de_origin,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CURRENT_ASSET_TO_ASSET,
+                value=_frame_value(cash_flow, "CAToAsset"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.NON_CURRENT_ASSET_TO_ASSET,
+                value=_frame_value(cash_flow, "NCAToAsset"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.TANGIBLE_ASSET_TO_ASSET,
+                value=_frame_value(cash_flow, "tangibleAssetToAsset"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.EBIT_TO_INTEREST,
+                value=_frame_value(cash_flow, "ebitToInterest"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CFO_TO_OPERATING_REVENUE,
+                value=_frame_value(cash_flow, "CFOToOR"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CFO_TO_NET_PROFIT,
+                value=_frame_value(cash_flow, "CFOToNP"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.CFO_TO_GROSS_REVENUE,
+                value=_frame_value(cash_flow, "CFOToGr"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_ROE,
+                value=_frame_value(dupont, "dupontROE"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_EQUITY_MULTIPLIER,
+                value=_frame_value(dupont, "dupontAssetSto498"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_ASSET_TURN,
+                value=_frame_value(dupont, "dupontAssetTurn"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_PNITONI,
+                value=_frame_value(dupont, "dupontPnitoni"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_NITOGR,
+                value=_frame_value(dupont, "dupontNitogr"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_TAX_BURDEN,
+                value=_frame_value(dupont, "dupontTaxBurden"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_INTEREST_BURDEN,
+                value=_frame_value(dupont, "dupontIntburden"),
+                value_origin=FundamentalValueOrigin.FETCHED,
+            )
+            _append_metric(
+                records,
+                security_id=security_id,
+                report_date=report_date,
+                ann_date=ann_date,
+                fetch_at=fetched_at,
+                statement=FundamentalStatement.DUPONT_EBIT_TO_GROSS_REVENUE,
+                value=_frame_value(dupont, "dupontEbittogr"),
+                value_origin=FundamentalValueOrigin.FETCHED,
             )
         return tuple(records)
 

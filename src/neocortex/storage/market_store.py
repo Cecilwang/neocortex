@@ -20,6 +20,7 @@ from neocortex.connectors.types import (
     TradingDateRecord,
 )
 from neocortex.models import Exchange, Market, SecurityId
+from neocortex.models import FundamentalStatement, FundamentalValueOrigin
 from neocortex.storage.market_models import (
     DailyPriceBarRow,
     DisclosureSectionRow,
@@ -502,7 +503,7 @@ class IntradayPriceBarRepository:
 
 
 class FundamentalSnapshotRepository:
-    """Persist source-specific fundamental snapshots."""
+    """Persist source-specific normalized quantitative fundamentals."""
 
     def __init__(self, session_factory) -> None:
         self.session_factory = session_factory
@@ -510,8 +511,6 @@ class FundamentalSnapshotRepository:
     def upsert_many(
         self,
         records: tuple[FundamentalSnapshotRecord, ...],
-        *,
-        fetched_at: str,
     ) -> int:
         if not records:
             return 0
@@ -526,15 +525,12 @@ class FundamentalSnapshotRepository:
                     market=record.security_id.market.value,
                     exchange=record.security_id.exchange.value,
                     symbol=record.security_id.symbol,
-                    period_end_date=record.period_end_date,
-                    canonical_period_label=record.canonical_period_label,
-                    statement_kind=record.statement_kind,
-                    provider_period_label=record.provider_period_label,
                     report_date=record.report_date,
-                    currency=record.currency,
-                    raw_items_json=record.raw_items_json,
-                    derived_metrics_json=record.derived_metrics_json,
-                    fetched_at=fetched_at,
+                    ann_date=record.ann_date,
+                    statement=record.statement.value,
+                    value=record.value,
+                    value_origin=record.value_origin.value,
+                    fetched_at=record.fetch_at,
                 )
                 session.execute(
                     statement.on_conflict_do_update(
@@ -543,16 +539,13 @@ class FundamentalSnapshotRepository:
                             "market",
                             "exchange",
                             "symbol",
-                            "period_end_date",
-                            "canonical_period_label",
-                            "statement_kind",
+                            "report_date",
+                            "ann_date",
+                            "statement",
                         ],
                         set_={
-                            "provider_period_label": statement.excluded.provider_period_label,
-                            "report_date": statement.excluded.report_date,
-                            "currency": statement.excluded.currency,
-                            "raw_items_json": statement.excluded.raw_items_json,
-                            "derived_metrics_json": statement.excluded.derived_metrics_json,
+                            "value": statement.excluded.value,
+                            "value_origin": statement.excluded.value_origin,
                             "fetched_at": statement.excluded.fetched_at,
                         },
                     )
@@ -579,29 +572,33 @@ class FundamentalSnapshotRepository:
                     FundamentalSnapshotRow.market == security_id.market.value,
                     FundamentalSnapshotRow.exchange == security_id.exchange.value,
                     FundamentalSnapshotRow.symbol == security_id.symbol,
-                    FundamentalSnapshotRow.period_end_date <= as_of_date.isoformat(),
+                    FundamentalSnapshotRow.ann_date <= as_of_date.isoformat(),
                 )
-                .order_by(FundamentalSnapshotRow.period_end_date.desc())
+                .order_by(
+                    FundamentalSnapshotRow.report_date.desc(),
+                    FundamentalSnapshotRow.ann_date.desc(),
+                    FundamentalSnapshotRow.statement.asc(),
+                )
                 .all()
             )
-        if not rows:
-            return ()
-        latest_period_end_date = rows[0].period_end_date
-        latest_rows = [
-            row for row in rows if row.period_end_date == latest_period_end_date
-        ]
+        latest_rows: list[FundamentalSnapshotRow] = []
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            key = (row.report_date, row.statement)
+            if key in seen:
+                continue
+            seen.add(key)
+            latest_rows.append(row)
         return tuple(
             FundamentalSnapshotRecord(
                 source=row.source,
                 security_id=security_id,
-                period_end_date=row.period_end_date,
-                canonical_period_label=row.canonical_period_label,
-                statement_kind=row.statement_kind,
-                provider_period_label=row.provider_period_label,
                 report_date=row.report_date,
-                currency=row.currency,
-                raw_items_json=row.raw_items_json,
-                derived_metrics_json=row.derived_metrics_json,
+                ann_date=row.ann_date,
+                fetch_at=row.fetched_at,
+                statement=FundamentalStatement(row.statement),
+                value=row.value,
+                value_origin=FundamentalValueOrigin(row.value_origin),
             )
             for row in latest_rows
         )

@@ -26,7 +26,13 @@ from neocortex.market_data_provider import (
     ReadThroughMarketDataProvider,
     SourceRoutingError,
 )
-from neocortex.models import Exchange, Market, SecurityId
+from neocortex.models import (
+    Exchange,
+    FundamentalStatement,
+    FundamentalValueOrigin,
+    Market,
+    SecurityId,
+)
 from neocortex.storage.market_store import MarketDataStore
 
 
@@ -547,11 +553,12 @@ def test_read_through_provider_returns_other_runtime_resources(
             FundamentalSnapshotRecord(
                 source="baostock",
                 security_id=cn_security_id,
-                period_end_date="2025-12-31",
-                canonical_period_label="2025FY",
-                statement_kind="valuation",
-                raw_items_json='{"pe": 20.0}',
-                derived_metrics_json='{"roe": 0.18}',
+                report_date="2025-12-31",
+                ann_date="2026-03-10",
+                fetch_at="2026-03-19T00:00:00Z",
+                statement=FundamentalStatement.ROE,
+                value=0.18,
+                value_origin=FundamentalValueOrigin.FETCHED,
             ),
         ),
         disclosure_records=(
@@ -602,7 +609,8 @@ def test_read_through_provider_returns_other_runtime_resources(
         as_of_date=date(2026, 3, 19),
     )
 
-    assert fundamentals[0].period_label == "2025FY"
+    assert fundamentals[0].statement is FundamentalStatement.ROE
+    assert fundamentals[0].report_date == date(2025, 12, 31)
     assert fundamentals[0].source == "baostock"
     assert disclosures[0].section_kind == "overview"
     assert disclosures[0].content == "渠道和产品都在扩张。"

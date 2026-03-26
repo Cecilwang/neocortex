@@ -183,7 +183,7 @@ class IntradayPriceBarRow(MarketDataBase):
 
 
 class FundamentalSnapshotRow(MarketDataBase):
-    """Source-specific fundamental snapshot."""
+    """Source-specific normalized quantitative fundamental metric."""
 
     __tablename__ = "fundamental_snapshots"
     __table_args__ = (
@@ -192,25 +192,40 @@ class FundamentalSnapshotRow(MarketDataBase):
             ["securities.market", "securities.exchange", "securities.symbol"],
         ),
         CheckConstraint(
-            "length(trim(canonical_period_label)) > 0",
-            name="ck_fundamental_period_label",
+            "length(trim(report_date)) > 0",
+            name="ck_fundamental_report_date",
         ),
         CheckConstraint(
-            "length(trim(statement_kind)) > 0",
-            name="ck_fundamental_statement_kind",
+            "length(trim(ann_date)) > 0",
+            name="ck_fundamental_ann_date",
         ),
-        CheckConstraint("json_valid(raw_items_json)", name="ck_fundamental_raw_json"),
         CheckConstraint(
-            "json_valid(derived_metrics_json)",
-            name="ck_fundamental_derived_json",
+            "length(trim(fetched_at)) > 0",
+            name="ck_fundamental_fetch_at",
+        ),
+        CheckConstraint(
+            "length(trim(statement)) > 0",
+            name="ck_fundamental_statement",
+        ),
+        CheckConstraint(
+            "value_origin IN ('fetched', 'derived')",
+            name="ck_fundamental_value_origin",
         ),
         Index(
-            "idx_fundamental_snapshots_series",
-            "source",
+            "idx_fundamental_visible",
             "market",
             "exchange",
             "symbol",
-            "period_end_date",
+            "ann_date",
+            "report_date",
+        ),
+        Index(
+            "idx_fundamental_statement",
+            "market",
+            "exchange",
+            "symbol",
+            "statement",
+            "ann_date",
         ),
     )
 
@@ -218,14 +233,11 @@ class FundamentalSnapshotRow(MarketDataBase):
     market: Mapped[str] = mapped_column(String, primary_key=True)
     exchange: Mapped[str] = mapped_column(String, primary_key=True)
     symbol: Mapped[str] = mapped_column(String, primary_key=True)
-    period_end_date: Mapped[str] = mapped_column(String, primary_key=True)
-    canonical_period_label: Mapped[str] = mapped_column(String, primary_key=True)
-    statement_kind: Mapped[str] = mapped_column(String, primary_key=True)
-    provider_period_label: Mapped[str | None] = mapped_column(Text, nullable=True)
-    report_date: Mapped[str | None] = mapped_column(String, nullable=True)
-    currency: Mapped[str | None] = mapped_column(String, nullable=True)
-    raw_items_json: Mapped[str] = mapped_column(Text, nullable=False)
-    derived_metrics_json: Mapped[str] = mapped_column(Text, nullable=False)
+    report_date: Mapped[str] = mapped_column(String, primary_key=True)
+    ann_date: Mapped[str] = mapped_column(String, primary_key=True)
+    statement: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[float] = mapped_column(nullable=False)
+    value_origin: Mapped[str] = mapped_column(String, nullable=False)
     fetched_at: Mapped[str] = mapped_column(String, nullable=False)
 
 

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from neocortex.models import Market
-from neocortex.models import SecurityId
+from neocortex.models import (
+    FundamentalStatement,
+    FundamentalValueOrigin,
+    Market,
+    SecurityId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,18 +78,16 @@ class AdjustmentFactorRecord:
 
 @dataclass(frozen=True, slots=True)
 class FundamentalSnapshotRecord:
-    """One source-specific structured fundamental snapshot."""
+    """One source-specific normalized quantitative fundamental metric."""
 
     source: str
     security_id: SecurityId
-    period_end_date: str
-    canonical_period_label: str
-    statement_kind: str
-    provider_period_label: str | None = None
-    report_date: str | None = None
-    currency: str | None = None
-    raw_items_json: str = "{}"
-    derived_metrics_json: str = "{}"
+    report_date: str
+    ann_date: str
+    fetch_at: str
+    statement: FundamentalStatement
+    value: float
+    value_origin: FundamentalValueOrigin
 
 
 @dataclass(frozen=True, slots=True)

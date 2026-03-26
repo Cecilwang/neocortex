@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
-import json
 import logging
 from typing import Protocol
 
@@ -21,7 +20,9 @@ from neocortex.markets import get_market_context
 from neocortex.models import (
     CompanyProfile,
     DisclosureSection,
+    FundamentalStatement,
     FundamentalSnapshot,
+    FundamentalValueOrigin,
     MacroSeriesPoint,
     Market,
     PRICE_BAR_CLOSE,
@@ -194,10 +195,12 @@ def fundamental_snapshot_from_record(
 ) -> FundamentalSnapshot:
     return FundamentalSnapshot(
         security_id=record.security_id,
-        as_of_date=date.fromisoformat(record.period_end_date),
-        period_label=record.canonical_period_label,
-        raw_items=json.loads(record.raw_items_json),
-        derived_metrics=json.loads(record.derived_metrics_json),
+        report_date=date.fromisoformat(record.report_date),
+        ann_date=date.fromisoformat(record.ann_date),
+        fetch_at=datetime.fromisoformat(record.fetch_at.replace("Z", "+00:00")),
+        statement=FundamentalStatement(record.statement),
+        value=record.value,
+        value_origin=FundamentalValueOrigin(record.value_origin),
         source=record.source,
     )
 

@@ -213,6 +213,9 @@ class FakeProviderFactory:
 
 
 class FakeAgent:
+    def __init__(self, role: AgentRole) -> None:
+        self.role = role
+
     def build_request(
         self,
         *,
@@ -224,7 +227,7 @@ class FakeAgent:
         _ = trace_by_role
         return AgentRequest(
             request_id=request_id,
-            agent=AgentRole.TECHNICAL,
+            agent=self.role,
             security_id=security_id,
             as_of_date=as_of_date,
         )
@@ -241,8 +244,7 @@ class FakePipeline:
         self.market_data = market_data
 
     def get_agent(self, role: AgentRole) -> FakeAgent:
-        assert role is AgentRole.TECHNICAL
-        return FakeAgent()
+        return FakeAgent(role)
 
 
 def reset_fake_provider_state() -> None:

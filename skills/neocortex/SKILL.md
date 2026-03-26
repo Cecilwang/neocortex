@@ -39,6 +39,7 @@ The wrapper does not clone repos, install dependencies, or scan arbitrary direct
 
 - Use `market-data-provider` by default for reading data.
 - Use `indicator` for technical indicator calculation.
+- Use `agent render --role quant_fundamental` for quantitative fundamentals prompt rendering.
 - Use `connector` only for single-source debugging.
 - Use `db query` only for SQLite inspection and troubleshooting.
 - Use `agent render` for single-agent prompt/request debugging.
@@ -48,6 +49,7 @@ The wrapper does not clone repos, install dependencies, or scan arbitrary direct
 
 - Prefer JSON when available.
 - If the command only supports table text, consume stdout as presentation text rather than trying to parse it as structured data.
+- `quant_fundamental` may render `n/a`, `NaN`, or blank for unsupported BaoStock-only metrics.
 
 ## Trigger Examples
 
@@ -56,6 +58,7 @@ The wrapper does not clone repos, install dependencies, or scan arbitrary direct
 - “算一下 MACD，最好给 JSON”
 - “调试一下 efinance profile 为什么和 provider 不一致”
 - “渲染 technical agent 的 prompt”
+- “渲染 quant_fundamental agent 的 prompt”
 - “清理 Feishu bot DB 的旧 job”
 
 ## Resources

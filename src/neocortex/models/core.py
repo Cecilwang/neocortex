@@ -71,6 +71,67 @@ class DataProvider(StrEnum):
     MANUAL = "manual"
 
 
+class FundamentalStatement(StrEnum):
+    """Canonical normalized quantitative fundamental metrics."""
+
+    NET_MARGIN = "net_margin"
+    GP_MARGIN = "gp_margin"
+    NET_PROFIT = "net_profit"
+    MAIN_BUSINESS_REVENUE = "main_business_revenue"
+    TOTAL_SHARE = "total_share"
+    TRADABLE_SHARE = "tradable_share"
+    ROA = "roa"
+    ROE = "roe"
+    AR_TURN_RATIO = "ar_turn_ratio"
+    AR_TURN_DAYS = "ar_turn_days"
+    INV_TURN_RATIO = "inv_turn_ratio"
+    ASSET_TURN = "asset_turn"
+    INV_TURN_DAYS = "inv_turn_days"
+    CA_TURN_RATIO = "ca_turn_ratio"
+    FCF = "fcf"
+    FCF_MARGIN = "fcf_margin"
+    EBITDA = "ebitda"
+    EQUITY_YOY = "equity_yoy"
+    ASSET_YOY = "asset_yoy"
+    NET_INCOME_YOY = "net_income_yoy"
+    EQUITY_RATIO = "equity_ratio"
+    QUICK_RATIO = "quick_ratio"
+    CURRENT_RATIO = "current_ratio"
+    CASH_RATIO = "cash_ratio"
+    DE_RATIO = "de_ratio"
+    LIABILITY_YOY = "liability_yoy"
+    LIABILITY_TO_ASSET = "liability_to_asset"
+    ASSET_TO_EQUITY = "asset_to_equity"
+    SALES_YOY = "sales_yoy"
+    CAGR_3Y = "cagr_3y"
+    EPS_TTM = "epsTTM"
+    EPS_GROWTH = "eps_growth"
+    PARENT_NET_INCOME_YOY = "parent_net_income_yoy"
+    DPS = "dps"
+    CURRENT_ASSET_TO_ASSET = "current_asset_to_asset"
+    NON_CURRENT_ASSET_TO_ASSET = "non_current_asset_to_asset"
+    TANGIBLE_ASSET_TO_ASSET = "tangible_asset_to_asset"
+    EBIT_TO_INTEREST = "ebit_to_interest"
+    CFO_TO_OPERATING_REVENUE = "cfo_to_operating_revenue"
+    CFO_TO_NET_PROFIT = "cfo_to_net_profit"
+    CFO_TO_GROSS_REVENUE = "cfo_to_gross_revenue"
+    DUPONT_ROE = "dupont_roe"
+    DUPONT_EQUITY_MULTIPLIER = "dupont_equity_multiplier"
+    DUPONT_ASSET_TURN = "dupont_asset_turn"
+    DUPONT_PNITONI = "dupont_pnitoni"
+    DUPONT_NITOGR = "dupont_nitogr"
+    DUPONT_TAX_BURDEN = "dupont_tax_burden"
+    DUPONT_INTEREST_BURDEN = "dupont_interest_burden"
+    DUPONT_EBIT_TO_GROSS_REVENUE = "dupont_ebit_to_gross_revenue"
+
+
+class FundamentalValueOrigin(StrEnum):
+    """Whether one normalized metric was fetched directly or derived."""
+
+    FETCHED = "fetched"
+    DERIVED = "derived"
+
+
 @dataclass(frozen=True, slots=True)
 class SecurityId:
     """Canonical stock identifier across multiple markets."""
@@ -241,13 +302,15 @@ def _validate_price_series_frame(
 
 @dataclass(frozen=True, slots=True)
 class FundamentalSnapshot:
-    """Normalized company fundamentals as of a point in time."""
+    """One normalized quantitative fundamental point-in-time metric."""
 
     security_id: SecurityId
-    as_of_date: date
-    period_label: str
-    raw_items: JsonDict = field(default_factory=dict)
-    derived_metrics: JsonDict = field(default_factory=dict)
+    report_date: date
+    ann_date: date
+    fetch_at: datetime
+    statement: FundamentalStatement
+    value: float
+    value_origin: FundamentalValueOrigin
     source: str | None = None
 
 

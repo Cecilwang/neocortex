@@ -154,3 +154,39 @@ def test_cli_agent_render_outputs_text_when_requested(monkeypatch, capsys) -> No
     assert "system:CN:600519" in rendered
     assert "User Prompt:" in rendered
     assert "user:2026-03-19" in rendered
+
+
+def test_cli_agent_render_supports_quant_role(monkeypatch, capsys) -> None:
+    from neocortex import cli
+    from neocortex.commands import agent as agent_commands
+
+    reset_fake_provider_state()
+    monkeypatch.setattr(
+        agent_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+    monkeypatch.setattr(agent_commands, "Pipeline", FakePipeline)
+
+    exit_code = cli.main(
+        [
+            "agent",
+            "render",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--role",
+            "quant_fundamental",
+            "--market",
+            "CN",
+            "--symbol",
+            "600519",
+            "--exchange",
+            "XSHG",
+            "--as-of-date",
+            "2026-03-19",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["request"]["agent"] == "quant_fundamental"

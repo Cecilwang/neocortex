@@ -15,7 +15,9 @@ from neocortex.models.core import (
     CompanyProfile,
     DataProvider,
     Exchange,
+    FundamentalStatement,
     FundamentalSnapshot,
+    FundamentalValueOrigin,
     Market,
     MarketContext,
     PRICE_BAR_TIMESTAMP,
@@ -156,10 +158,12 @@ def test_fundamental_snapshot_tracks_source_provider_without_symbol_mapping(
 ) -> None:
     snapshot = FundamentalSnapshot(
         security_id=security_id,
-        as_of_date=date(2026, 3, 15),
-        period_label="TTM",
-        raw_items={"revenue": 100.0},
-        derived_metrics={"roe": 0.18},
+        report_date=date(2025, 12, 31),
+        ann_date=date(2026, 3, 15),
+        fetch_at=datetime(2026, 3, 15, 12, 0),
+        statement=FundamentalStatement.ROE,
+        value=0.18,
+        value_origin=FundamentalValueOrigin.FETCHED,
         source=DataProvider.YAHOO_FINANCE,
     )
 

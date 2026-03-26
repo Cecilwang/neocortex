@@ -219,6 +219,7 @@ uv run python -m neocortex sync trading-dates
 `agent` 用来调试单个 agent 的 request 和 prompt。
 
 `technical` 在构建技术指标时默认使用前复权（`qfq`）行情。
+`quant_fundamental` 当前只支持 `CN`，底层依赖 BaoStock 归一化后的财务点位；缺失或不稳定指标会渲染成 `n/a`。
 
 渲染 request 和 prompt 的 JSON：
 
@@ -238,6 +239,16 @@ uv run python -m neocortex agent render \
   --name 中芯国际 \
   --as-of-date 2026-03-20 \
   --format text
+```
+
+渲染 quant fundamental agent：
+
+```bash
+uv run python -m neocortex agent render \
+  --role quant_fundamental \
+  --name 中芯国际 \
+  --as-of-date 2026-03-20 \
+  --format json
 ```
 
 ## Indicator
@@ -373,6 +384,7 @@ uv run python -m neocortex --env-file .env.local --log-level DEBUG ...
 
 - 查公司概况：优先 `market-data-provider profile`
 - 查历史行情：优先 `market-data-provider bars`
+- 查财务点位：优先 `market-data-provider fundamentals`
 - 算技术指标：优先 `indicator <name>`
 - 调试单源异常：再切到 `connector`
 - 直接看 SQLite 表或排障：才用 `db query`
@@ -403,6 +415,8 @@ uv run python -m neocortex --env-file .env.local --log-level DEBUG ...
 - `db query` 只允许单条只读 SQL；写操作、DDL、多语句和非法表名会被拒绝
 - command kernel 约束一个 `CommandSpec` 对应一个叶子命令；选项必须挂在叶子上
 - `CN` 市场下，未显式传 `--end-date` / `--as-of-date` 时，会使用 market-aware 默认日期规则，而不是盲目取当天
+- `quant_fundamental` 当前是 `CN-only`；非 `CN` 市场会直接失败
+- `quant_fundamental` 的部分字段可能显示为 `n/a`, `NaA`, 或空白
 - `sync bars` 必须且只能选择一种目标模式：
   - `--symbol` / `--name`
   - `--ticker`
@@ -456,6 +470,16 @@ uv run python -m neocortex db query \
 ```bash
 uv run python -m neocortex agent render \
   --role technical \
+  --name 中芯国际 \
+  --as-of-date 2026-03-20 \
+  --format json
+```
+
+渲染 quant fundamental agent：
+
+```bash
+uv run python -m neocortex agent render \
+  --role quant_fundamental \
   --name 中芯国际 \
   --as-of-date 2026-03-20 \
   --format json

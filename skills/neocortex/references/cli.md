@@ -44,6 +44,7 @@ uv run python -m neocortex --env-file .env.local --log-level DEBUG ...
 
 - Company profile: `market-data-provider profile`
 - Historical bars: `market-data-provider bars`
+- Quant fundamentals prompt: `agent render --role quant_fundamental`
 - Indicators: `indicator <name>`
 - Source-level debugging: `connector ...`
 - Bottom-table inspection: `db query`
@@ -76,6 +77,7 @@ Commands that currently return table text instead of JSON include:
 - write SQL, DDL, multi-statement SQL, and invalid table names are rejected
 - options belong on leaf commands only
 - CN market date defaults are market-aware rather than blindly using today
+- `quant_fundamental` may render some metrics as `n/a`, `NaN`, or blank
 - `sync bars` requires exactly one target mode:
   - `--symbol` / `--name`
   - `--ticker`
@@ -129,6 +131,16 @@ Agent render:
 ```bash
 uv run python -m neocortex agent render \
   --role technical \
+  --name 中芯国际 \
+  --as-of-date 2026-03-20 \
+  --format json
+```
+
+Quant fundamental render:
+
+```bash
+uv run python -m neocortex agent render \
+  --role quant_fundamental \
   --name 中芯国际 \
   --as-of-date 2026-03-20 \
   --format json
