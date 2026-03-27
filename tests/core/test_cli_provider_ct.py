@@ -113,7 +113,7 @@ def test_cli_market_data_provider_profile_uses_read_through_provider(
     assert payload["company_name"] == "贵州茅台"
 
 
-def test_cli_market_data_provider_fundamentals_defaults_as_of_date_with_market_rule(
+def test_cli_market_data_provider_fundamentals_defaults_to_table_output(
     monkeypatch,
     capsys,
 ) -> None:
@@ -143,6 +143,49 @@ def test_cli_market_data_provider_fundamentals_defaults_as_of_date_with_market_r
             "CN",
             "--symbol",
             "600519",
+        ]
+    )
+
+    assert exit_code == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert "symbol" in lines[0]
+    assert "as_of_date" in lines[0]
+    assert "600519" in lines[-1]
+    assert "2026-03-20" in lines[-1]
+
+
+def test_cli_market_data_provider_fundamentals_supports_json_output(
+    monkeypatch,
+    capsys,
+) -> None:
+    from neocortex import cli
+    from neocortex import date_resolution
+    from neocortex.commands import market_data_provider as provider_commands
+
+    reset_fake_provider_state()
+    monkeypatch.setattr(
+        provider_commands,
+        "ReadThroughMarketDataProvider",
+        FakeProviderFactory,
+    )
+    monkeypatch.setattr(
+        date_resolution,
+        "default_end_date",
+        lambda *, market, provider=None, now=None: date(2026, 3, 20),
+    )
+
+    exit_code = cli.main(
+        [
+            "market-data-provider",
+            "fundamentals",
+            "--db-path",
+            "/tmp/market.sqlite3",
+            "--market",
+            "CN",
+            "--symbol",
+            "600519",
+            "--format",
+            "json",
         ]
     )
 

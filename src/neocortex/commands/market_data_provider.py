@@ -23,6 +23,7 @@ from neocortex.date_resolution import (
 )
 from neocortex.market_data_provider import ReadThroughMarketDataProvider
 from neocortex.models import Market
+from neocortex.serialization import to_json_ready
 from neocortex.security_resolution import (
     add_security_identity_arguments,
     resolve_security_id,
@@ -46,6 +47,26 @@ def _dataframe_columns_and_rows(
     rows = tuple(
         tuple(_normalize_cell_value(value) for value in row)
         for row in frame.itertuples(index=False, name=None)
+    )
+    return columns, rows
+
+
+def _json_records_to_table(
+    records: tuple[object, ...] | list[object],
+) -> tuple[tuple[str, ...], tuple[tuple[object, ...], ...]]:
+    payload = to_json_ready(records)
+    if not payload:
+        return (), ()
+    if not isinstance(payload, list):
+        raise TypeError("Expected one sequence payload for table rendering.")
+    first = payload[0]
+    if not isinstance(first, dict):
+        raise TypeError("Table rendering requires mapping-like records.")
+    columns = tuple(str(column) for column in first.keys())
+    rows = tuple(
+        tuple(_normalize_cell_value(record.get(column)) for column in columns)
+        for record in payload
+        if isinstance(record, dict)
     )
     return columns, rows
 
@@ -188,6 +209,11 @@ def build_market_data_provider_fundamentals_command_spec(
         parser.add_argument("--db-path", type=str, default=default_db_path)
         add_security_identity_arguments(parser)
         add_as_of_date_argument(parser)
+        parser.add_argument(
+            "--format",
+            choices=("table", "json"),
+            default="table",
+        )
 
     def handler(args: argparse.Namespace, context: CommandContext) -> CommandResult:
         _ = context
@@ -202,12 +228,14 @@ def build_market_data_provider_fundamentals_command_spec(
             f"Running provider fundamentals command: security={security_id.ticker} "
             f"as_of_date={as_of_date}"
         )
-        return CommandResult.json(
-            provider.get_fundamental_snapshots(
-                security_id,
-                as_of_date=as_of_date,
-            )
+        records = provider.get_fundamental_snapshots(
+            security_id,
+            as_of_date=as_of_date,
         )
+        if args.format == "json":
+            return CommandResult.json(records)
+        columns, rows = _json_records_to_table(records)
+        return CommandResult.table(columns=columns, rows=rows, payload=records)
 
     return CommandSpec(
         id=("market-data-provider", "fundamentals"),
