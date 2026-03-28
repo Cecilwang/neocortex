@@ -135,14 +135,22 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "roeAvg": "0.18" if (year, quarter) == (2025, 4) else "0.16",
                     "npMargin": "0.21" if (year, quarter) == (2025, 4) else "0.19",
                     "gpMargin": "0.32" if (year, quarter) == (2025, 4) else "0.30",
-                    "netProfit": "80000000000" if (year, quarter) == (2025, 4) else "72000000000",
+                    "netProfit": "80000000000"
+                    if (year, quarter) == (2025, 4)
+                    else "72000000000",
                     "epsTTM": "4.5" if (year, quarter) == (2025, 4) else "4.0",
-                    "MBRevenue": "180000000000" if (year, quarter) == (2025, 4) else "165000000000",
+                    "MBRevenue": "180000000000"
+                    if (year, quarter) == (2025, 4)
+                    else "165000000000",
                     "totalShare": "1256197800",
                     "liqaShare": "1256197800",
                 },
@@ -156,8 +164,12 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "NRTurnRatio": "9.0" if (year, quarter) == (2025, 4) else "8.5",
                     "NRTurnDays": "40" if (year, quarter) == (2025, 4) else "43",
                     "INVTurnRatio": "10.5" if (year, quarter) == (2025, 4) else "9.6",
@@ -175,8 +187,12 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "YOYEquity": "0.11" if (year, quarter) == (2025, 4) else "0.09",
                     "YOYAsset": "0.08" if (year, quarter) == (2025, 4) else "0.07",
                     "YOYNI": "0.13" if (year, quarter) == (2025, 4) else "0.10",
@@ -194,13 +210,19 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "currentRatio": "2.1" if (year, quarter) == (2025, 4) else "2.0",
                     "quickRatio": "1.4" if (year, quarter) == (2025, 4) else "1.3",
                     "cashRatio": "1.0" if (year, quarter) == (2025, 4) else "0.9",
                     "YOYLiability": "0.06" if (year, quarter) == (2025, 4) else "0.05",
-                    "liabilityToAsset": "0.45" if (year, quarter) == (2025, 4) else "0.48",
+                    "liabilityToAsset": "0.45"
+                    if (year, quarter) == (2025, 4)
+                    else "0.48",
                     "assetToEquity": "1.82" if (year, quarter) == (2025, 4) else "1.92",
                 },
             )
@@ -213,11 +235,17 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "CAToAsset": "0.52" if (year, quarter) == (2025, 4) else "0.51",
                     "NCAToAsset": "0.48" if (year, quarter) == (2025, 4) else "0.49",
-                    "tangibleAssetToAsset": "0.74" if (year, quarter) == (2025, 4) else "0.73",
+                    "tangibleAssetToAsset": "0.74"
+                    if (year, quarter) == (2025, 4)
+                    else "0.73",
                     "ebitToInterest": "45" if (year, quarter) == (2025, 4) else "42",
                     "CFOToOR": "0.29" if (year, quarter) == (2025, 4) else "0.27",
                     "CFOToNP": "1.21" if (year, quarter) == (2025, 4) else "1.16",
@@ -233,16 +261,28 @@ class FakeBaoStockAPI:
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "dupontROE": "0.18" if (year, quarter) == (2025, 4) else "0.16",
-                    "dupontAssetSto498": "1.82" if (year, quarter) == (2025, 4) else "1.92",
+                    "dupontAssetSto498": "1.82"
+                    if (year, quarter) == (2025, 4)
+                    else "1.92",
                     "dupontAssetTurn": "0.8" if (year, quarter) == (2025, 4) else "0.7",
                     "dupontPnitoni": "0.21" if (year, quarter) == (2025, 4) else "0.19",
                     "dupontNitogr": "0.23" if (year, quarter) == (2025, 4) else "0.20",
-                    "dupontTaxBurden": "0.88" if (year, quarter) == (2025, 4) else "0.87",
-                    "dupontIntburden": "0.98" if (year, quarter) == (2025, 4) else "0.97",
-                    "dupontEbittogr": "0.26" if (year, quarter) == (2025, 4) else "0.24",
+                    "dupontTaxBurden": "0.88"
+                    if (year, quarter) == (2025, 4)
+                    else "0.87",
+                    "dupontIntburden": "0.98"
+                    if (year, quarter) == (2025, 4)
+                    else "0.97",
+                    "dupontEbittogr": "0.26"
+                    if (year, quarter) == (2025, 4)
+                    else "0.24",
                 },
             )
         )
@@ -302,14 +342,19 @@ class FakeBaoStockNoTtmEpsAPI(FakeBaoStockAPI):
                 year,
                 quarter,
                 {
-                    "pubDate": "2026-03-10" if (year, quarter) == (2025, 4) else "2025-10-25",
-                    "statDate": "2025-12-31" if (year, quarter) == (2025, 4) else "2025-09-30",
+                    "pubDate": "2026-03-10"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-10-25",
+                    "statDate": "2025-12-31"
+                    if (year, quarter) == (2025, 4)
+                    else "2025-09-30",
                     "roeAvg": "0.18" if (year, quarter) == (2025, 4) else "0.16",
                     "npMargin": "0.21" if (year, quarter) == (2025, 4) else "0.19",
                     "epsBasic": "1.1" if (year, quarter) == (2025, 4) else "1.0",
                 },
             )
         )
+
 
 class MissingProfileBaoStockAPI(FakeBaoStockAPI):
     def query_stock_basic(self, code: str = "", code_name: str = ""):
@@ -755,89 +800,108 @@ def test_baostock_connector_fetches_fundamentals_and_macro_points() -> None:
     latest_snapshots = [
         snapshot
         for snapshot in snapshots
-        if snapshot.report_date == "2025-12-31"
-        and snapshot.ann_date == "2026-03-10"
+        if snapshot.report_date == "2025-12-31" and snapshot.ann_date == "2026-03-10"
     ]
     previous_snapshots = [
         snapshot
         for snapshot in snapshots
-        if snapshot.report_date == "2025-09-30"
-        and snapshot.ann_date == "2025-10-25"
+        if snapshot.report_date == "2025-09-30" and snapshot.ann_date == "2025-10-25"
     ]
 
     assert len(latest_snapshots) >= 20
     assert previous_snapshots
     assert {snapshot.fetch_at for snapshot in snapshots} == {snapshots[0].fetch_at}
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.NET_MARGIN,
-        value=0.21,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.EQUITY_RATIO,
-        value=0.55,
-        value_origin=FundamentalValueOrigin.DERIVED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.GP_MARGIN,
-        value=0.32,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.CURRENT_RATIO,
-        value=2.1,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.CFO_TO_OPERATING_REVENUE,
-        value=0.29,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-12-31",
-        ann_date="2026-03-10",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.DUPONT_ROE,
-        value=0.18,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
-    assert FundamentalSnapshotRecord(
-        source="baostock",
-        security_id=security_id,
-        report_date="2025-09-30",
-        ann_date="2025-10-25",
-        fetch_at=snapshots[0].fetch_at,
-        statement=FundamentalStatement.NET_MARGIN,
-        value=0.19,
-        value_origin=FundamentalValueOrigin.FETCHED,
-    ) in snapshots
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.NET_MARGIN,
+            value=0.21,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.EQUITY_RATIO,
+            value=0.55,
+            value_origin=FundamentalValueOrigin.DERIVED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.GP_MARGIN,
+            value=0.32,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.CURRENT_RATIO,
+            value=2.1,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.CFO_TO_OPERATING_REVENUE,
+            value=0.29,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-12-31",
+            ann_date="2026-03-10",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.DUPONT_ROE,
+            value=0.18,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
+    assert (
+        FundamentalSnapshotRecord(
+            source="baostock",
+            security_id=security_id,
+            report_date="2025-09-30",
+            ann_date="2025-10-25",
+            fetch_at=snapshots[0].fetch_at,
+            statement=FundamentalStatement.NET_MARGIN,
+            value=0.19,
+            value_origin=FundamentalValueOrigin.FETCHED,
+        )
+        in snapshots
+    )
     assert macro_points == (
         MacroPointRecord(
             source="baostock",

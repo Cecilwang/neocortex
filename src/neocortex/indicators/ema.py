@@ -11,6 +11,7 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
+from neocortex.indicators.ta_lib_backend import ema as calculate_ema_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 import pandas as pd
 
@@ -65,7 +66,7 @@ class EMAIndicator(IndicatorSpec):
             )
             return EMA(spec=self, parameters=resolved_parameters, data=frame)
 
-        values = calculate_ema_series(closes, window)
+        values = calculate_ema_series(closes, window=window)
 
         frame = pd.DataFrame(
             {
@@ -85,22 +86,6 @@ class EMA(Indicator):
     @property
     def ema(self) -> pd.Series:
         return self.data["value"]
-
-
-def calculate_ema_series(values: pd.Series, window: int) -> pd.Series:
-    if len(values) < window:
-        return pd.Series([None] * len(values), dtype=object)
-
-    alpha = 2.0 / (window + 1)
-    ema_values: list[float | None] = [None] * (window - 1)
-    window_values = values.iloc[:window]
-    ema = float(sum(window_values) / window)
-    ema_values.append(ema)
-    trailing_values = values.iloc[window:]
-    for value in trailing_values:
-        ema = (alpha * float(value)) + ((1 - alpha) * ema)
-        ema_values.append(ema)
-    return pd.Series(ema_values, dtype=object)
 
 
 ema = EMAIndicator()

@@ -40,7 +40,4 @@ def test_render_card_prefixes_job_status_without_mutating_source_card() -> None:
         rendered["header"]["title"]["content"]
         == "Job 3 succeeded: demo async-table (1 rows)"
     )
-    assert (
-        response.card["header"]["title"]["content"]
-        == "demo async-table (1 rows)"
-    )
+    assert response.card["header"]["title"]["content"] == "demo async-table (1 rows)"

@@ -238,7 +238,7 @@ def test_calculate_indicator_returns_rsi_series(
         None,
         None,
         85.71428571428571,
-        90.0,
+        89.99999999999999,
     ]
 
 
@@ -253,8 +253,8 @@ def test_calculate_indicator_returns_roc_series(
         None,
         None,
         None,
-        5.0,
-        4.901960784313726,
+        5.000000000000004,
+        4.90196078431373,
     ]
 
 
@@ -274,22 +274,22 @@ def test_calculate_macd_indicator_returns_aligned_series(
         None,
         None,
         None,
-        1.0,
-        1.0,
+        None,
+        0.8333333333333428,
     ]
     assert result.signal.tolist() == [
         None,
         None,
         None,
         None,
-        1.0,
+        0.7500000000000071,
     ]
     assert result.hist.tolist() == [
         None,
         None,
         None,
         None,
-        0.0,
+        0.0833333333333357,
     ]
 
 

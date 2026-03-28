@@ -13,6 +13,7 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
+from neocortex.indicators.ta_lib_backend import roc as calculate_roc_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
 
@@ -53,15 +54,11 @@ class ROCIndicator(IndicatorSpec):
             bars=bars,
             parameters=resolved_parameters,
         )
-        period = resolved_parameters.period
-        closes = bars.closes
-        base = closes.shift(period)
-        values = ((closes - base) / base) * 100.0
-        values = values.where(base != 0)
+        values = calculate_roc_series(bars.closes, period=resolved_parameters.period)
         frame = pd.DataFrame(
             {
                 PRICE_BAR_TIMESTAMP: bars.timestamps,
-                "value": values.astype(object).where(values.notna(), None),
+                "value": values,
             }
         )
         return ROC(

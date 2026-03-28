@@ -12,7 +12,7 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
-from neocortex.indicators.ema import calculate_ema_series
+from neocortex.indicators.ta_lib_backend import macd as calculate_macd_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 import pandas as pd
 
@@ -81,64 +81,20 @@ class MACDIndicator(IndicatorSpec):
             )
             return MACD(spec=self, parameters=resolved_parameters, data=frame)
 
-        fast_ema = calculate_ema_series(closes, resolved_parameters.fast_window)
-        slow_ema = calculate_ema_series(closes, resolved_parameters.slow_window)
-        macd_values: list[float | None] = []
-        for fast, slow, close in zip(
-            fast_ema.tolist(), slow_ema.tolist(), closes, strict=False
-        ):
-            if fast is None or slow is None:
-                macd_values.append(None)
-                continue
-            diff = fast - slow
-            if resolved_parameters.normalization is None:
-                macd_values.append(diff)
-                continue
-
-            if resolved_parameters.normalization == "close":
-                divisor = float(close)
-            elif resolved_parameters.normalization == "slow":
-                divisor = slow
-            elif resolved_parameters.normalization == "fast":
-                divisor = fast
-            else:
-                raise ValueError(
-                    "normalization must be one of None, 'close', 'slow', or 'fast'."
-                )
-            macd_values.append(0.0 if divisor == 0 else diff / divisor)
-        macd_series = pd.Series(macd_values, dtype=object)
-
-        filtered_values = macd_series[macd_series.notna()]
-        if filtered_values.empty:
-            signal_series = pd.Series([None] * len(macd_series), dtype=object)
-        else:
-            raw_signal_values = calculate_ema_series(
-                filtered_values, resolved_parameters.signal_window
-            )
-            signal_values: list[float | None] = []
-            signal_index = 0
-            for value in macd_series.tolist():
-                if value is None:
-                    signal_values.append(None)
-                    continue
-                signal_values.append(raw_signal_values.iloc[signal_index])
-                signal_index += 1
-            signal_series = pd.Series(signal_values, dtype=object)
-        hist_values = [
-            None
-            if macd_value is None or signal_value is None
-            else macd_value - signal_value
-            for macd_value, signal_value in zip(
-                macd_series.tolist(), signal_series.tolist(), strict=False
-            )
-        ]
+        macd_series, signal_series, hist_series = calculate_macd_series(
+            closes,
+            fast_window=resolved_parameters.fast_window,
+            slow_window=resolved_parameters.slow_window,
+            signal_window=resolved_parameters.signal_window,
+            normalization=resolved_parameters.normalization,
+        )
 
         frame = pd.DataFrame(
             {
                 PRICE_BAR_TIMESTAMP: bars.timestamps,
                 "macd": macd_series,
                 "signal": signal_series,
-                "hist": pd.Series(hist_values, dtype=object),
+                "hist": hist_series,
             }
         )
         return MACD(

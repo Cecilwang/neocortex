@@ -13,8 +13,8 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
+from neocortex.indicators.ta_lib_backend import kdj as calculate_kdj_series
 from neocortex.models.core import (
-    PRICE_BAR_CLOSE,
     PRICE_BAR_HIGH,
     PRICE_BAR_LOW,
     PRICE_BAR_TIMESTAMP,
@@ -75,45 +75,21 @@ class KDJIndicator(IndicatorSpec):
             )
             return KDJ(spec=self, parameters=resolved_parameters, data=frame)
 
-        window = resolved_parameters.window
-        signal_window = resolved_parameters.signal_window
-        previous_weight = (signal_window - 1) / signal_window
-        current_weight = 1.0 / signal_window
-        k: list[float | None] = [None] * len(bars)
-        d: list[float | None] = [None] * len(bars)
-        j: list[float | None] = [None] * len(bars)
         frame = bars.bars
-        previous_rsv: float = 50
-        previous_k: float = 50
-        previous_d: float = 50
-
-        for end in range(window - 1, len(bars)):
-            window_frame = frame.iloc[end - window + 1 : end + 1]
-            highest = float(window_frame[PRICE_BAR_HIGH].max())
-            lowest = float(window_frame[PRICE_BAR_LOW].min())
-            if highest == lowest:
-                rsv = previous_rsv
-            else:
-                latest_close = float(window_frame[PRICE_BAR_CLOSE].iloc[-1])
-                rsv = 100.0 * ((latest_close - lowest) / (highest - lowest))
-
-            latest_k = (previous_weight * previous_k) + (current_weight * rsv)
-            latest_d = (previous_weight * previous_d) + (current_weight * latest_k)
-            latest_j = (3 * latest_k) - (2 * latest_d)
-
-            k[end] = latest_k
-            d[end] = latest_d
-            j[end] = latest_j
-            previous_rsv = rsv
-            previous_k = latest_k
-            previous_d = latest_d
+        k, d, j = calculate_kdj_series(
+            frame[PRICE_BAR_HIGH],
+            frame[PRICE_BAR_LOW],
+            bars.closes,
+            window=resolved_parameters.window,
+            signal_window=resolved_parameters.signal_window,
+        )
 
         result_frame = pd.DataFrame(
             {
                 PRICE_BAR_TIMESTAMP: bars.timestamps,
-                "k": pd.Series(k, dtype=object),
-                "d": pd.Series(d, dtype=object),
-                "j": pd.Series(j, dtype=object),
+                "k": k,
+                "d": d,
+                "j": j,
             }
         )
         return KDJ(spec=self, parameters=resolved_parameters, data=result_frame)

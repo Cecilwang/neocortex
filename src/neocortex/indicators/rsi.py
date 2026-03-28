@@ -11,15 +11,9 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
+from neocortex.indicators.ta_lib_backend import rsi as calculate_rsi_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 import pandas as pd
-
-
-def _rsi_value(average_gain: float, average_loss: float) -> float:
-    if average_loss == 0:
-        return 100.0
-    relative_strength = average_gain / average_loss
-    return 100 - (100 / (1 + relative_strength))
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,39 +66,11 @@ class RSIIndicator(IndicatorSpec):
             )
             return RSI(spec=self, parameters=resolved_parameters, data=frame)
 
-        values: list[float | None] = [None] * len(closes)
-        if len(closes) <= period:
-            frame = pd.DataFrame(
-                {
-                    PRICE_BAR_TIMESTAMP: bars.timestamps,
-                    "value": pd.Series(values, dtype=object),
-                }
-            )
-            return RSI(
-                spec=self,
-                parameters=resolved_parameters,
-                data=frame,
-            )
-
-        changes = closes.diff().iloc[1:]
-        gains = [max(change, 0.0) for change in changes]
-        losses = [abs(min(change, 0.0)) for change in changes]
-
-        average_gain = sum(gains[:period]) / period
-        average_loss = sum(losses[:period]) / period
-        values[period] = _rsi_value(average_gain, average_loss)
-
-        for index in range(period + 1, len(bars)):
-            gain = gains[index - 1]
-            loss = losses[index - 1]
-            average_gain = ((average_gain * (period - 1)) + gain) / period
-            average_loss = ((average_loss * (period - 1)) + loss) / period
-            values[index] = _rsi_value(average_gain, average_loss)
-
+        values = calculate_rsi_series(closes, period=period)
         frame = pd.DataFrame(
             {
                 PRICE_BAR_TIMESTAMP: bars.timestamps,
-                "value": pd.Series(values, dtype=object),
+                "value": values,
             }
         )
         return RSI(
