@@ -57,8 +57,11 @@ def _to_baostock_code(security_id: SecurityId) -> str:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
@@ -438,16 +441,13 @@ class _BaoStockApiClient:
             if all(frame.empty for frame in frames.values()):
                 continue
 
-            report_date = (
-                _extract_snapshot_date(
-                    frames,
-                    "statDate",
-                    "statdate",
-                    "reportDate",
-                    "report_date",
-                )
-                or _quarter_period_end(year, quarter)
-            )
+            report_date = _extract_snapshot_date(
+                frames,
+                "statDate",
+                "statdate",
+                "reportDate",
+                "report_date",
+            ) or _quarter_period_end(year, quarter)
             ann_date = _extract_snapshot_date(
                 frames,
                 "pubDate",
@@ -456,9 +456,7 @@ class _BaoStockApiClient:
                 "ann_date",
             )
             if ann_date is None:
-                raise ValueError(
-                    "BaoStock fundamental snapshot is missing ann_date."
-                )
+                raise ValueError("BaoStock fundamental snapshot is missing ann_date.")
 
             profitability = frames["profitability"]
             operating = frames["operating_efficiency"]
@@ -760,10 +758,16 @@ class _BaoStockApiClient:
                 value_origin=equity_origin,
             )
 
-            direct_de_ratio = _frame_value(balance, "debtToEquity", "deRatio", "DTRatio")
+            direct_de_ratio = _frame_value(
+                balance, "debtToEquity", "deRatio", "DTRatio"
+            )
             de_ratio = direct_de_ratio
             de_origin = FundamentalValueOrigin.FETCHED
-            if de_ratio is None and liability_to_asset is not None and 0 <= liability_to_asset < 1:
+            if (
+                de_ratio is None
+                and liability_to_asset is not None
+                and 0 <= liability_to_asset < 1
+            ):
                 equity = 1.0 - liability_to_asset
                 if equity > 0:
                     de_ratio = liability_to_asset / equity

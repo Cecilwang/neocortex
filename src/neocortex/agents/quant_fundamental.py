@@ -176,7 +176,9 @@ def _build_quant_input(
     fundamentals: tuple[FundamentalSnapshot, ...],
     latest_close: float | None,
 ) -> QuantFundamentalInput:
-    rows_by_report_date: dict[date, dict[FundamentalStatement, FundamentalSnapshot]] = {}
+    rows_by_report_date: dict[
+        date, dict[FundamentalStatement, FundamentalSnapshot]
+    ] = {}
     for snapshot in fundamentals:
         rows_by_report_date.setdefault(snapshot.report_date, {})[snapshot.statement] = (
             snapshot
@@ -201,7 +203,9 @@ def _build_quant_input(
     latest_eps = latest_rows.get(FundamentalStatement.EPS_TTM)
     previous_eps = previous_rows.get(FundamentalStatement.EPS_TTM)
     per = _build_ratio_metric(
-        latest_value=None if latest_close is None or latest_eps is None else latest_close / latest_eps.value,
+        latest_value=None
+        if latest_close is None or latest_eps is None
+        else latest_close / latest_eps.value,
         previous_value=(
             None
             if latest_close is None or previous_eps is None

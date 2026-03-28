@@ -66,7 +66,11 @@ def main() -> int:
     if not argv:
         parser.error("missing neocortex CLI arguments")
 
-    if args.repo is None and not _looks_like_repo_root(Path.cwd()) and _has_installed_neocortex():
+    if (
+        args.repo is None
+        and not _looks_like_repo_root(Path.cwd())
+        and _has_installed_neocortex()
+    ):
         command = [sys.executable, "-m", "neocortex", *argv]
         completed = subprocess.run(command)
         return completed.returncode

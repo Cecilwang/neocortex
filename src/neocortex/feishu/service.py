@@ -242,9 +242,7 @@ class FeishuBotService:
                 logger.info(f"Skipping duplicate Feishu event {event.event_id}.")
                 return
             if receipt.status is EventReceiptStatus.FAILED:
-                logger.info(
-                    f"Skipping duplicate failed Feishu event {event.event_id}."
-                )
+                logger.info(f"Skipping duplicate failed Feishu event {event.event_id}.")
                 return
             logger.info(
                 f"Skipping in-progress duplicate Feishu event {event.event_id}."

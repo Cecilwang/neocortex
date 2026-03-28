@@ -178,7 +178,9 @@ def test_group_message_without_activation_is_ignored(tmp_path) -> None:
     service.handle_event_payload(_message_event(text="/neo help"))
 
     assert client.messages == []
-    assert client.reactions == [{"message_id": "msg-1", "emoji_type": _REACTION_IGNORED}]
+    assert client.reactions == [
+        {"message_id": "msg-1", "emoji_type": _REACTION_IGNORED}
+    ]
 
 
 def test_p2p_help_message_sends_help_message(tmp_path) -> None:
@@ -201,7 +203,9 @@ def test_retry_failed_event_is_skipped_after_failure_reply_sent(tmp_path) -> Non
     client = FakeClient()
     store = FeishuBotStore(tmp_path / "feishu.sqlite3")
     service = FeishuBotService(_settings(tmp_path), client=client, store=store)
-    client.fail_next_send = RuntimeError("status=400 body={'code':123,'msg':'too large'}")
+    client.fail_next_send = RuntimeError(
+        "status=400 body={'code':123,'msg':'too large'}"
+    )
 
     payload = _message_event(text="help", chat_type="p2p", event_id="evt-fail")
 

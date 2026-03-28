@@ -12,6 +12,7 @@ from neocortex.indicators.core import (
     coerce_indicator_params,
     log_indicator_calculation,
 )
+from neocortex.indicators.ta_lib_backend import sma as calculate_sma_series
 from neocortex.models.core import PRICE_BAR_TIMESTAMP, PriceSeries
 
 
@@ -52,12 +53,11 @@ class SMAIndicator(IndicatorSpec):
             bars=bars,
             parameters=resolved_parameters,
         )
-        window = resolved_parameters.window
-        values = bars.closes.rolling(window=window).mean()
+        values = calculate_sma_series(bars.closes, window=resolved_parameters.window)
         frame = pd.DataFrame(
             {
                 PRICE_BAR_TIMESTAMP: bars.timestamps,
-                "value": values.astype(object).where(values.notna(), None),
+                "value": values,
             }
         )
         return SMA(
